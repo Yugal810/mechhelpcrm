@@ -32,6 +32,36 @@ async function handleServicePlans(req, res) {
     const params = extractParams(req);
     console.log("📥 AiSensy Service Plans Request Params:", JSON.stringify(params));
     const result = await aiSensyService.getServicePlans(params);
+
+    // Auto-create a Fresh Lead in Supabase if phone number is provided
+    const customerPhone = params.phone || params.wa_number || params.identifier;
+    if (result.found !== false && customerPhone) {
+      const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+      const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY;
+      if (SUPABASE_URL && SUPABASE_KEY) {
+        fetch(`${SUPABASE_URL}/rest/v1/leads`, {
+          method: 'POST',
+          headers: {
+            'apikey': SUPABASE_KEY,
+            'Authorization': `Bearer ${SUPABASE_KEY}`,
+            'Content-Type': 'application/json',
+            'Prefer': 'return=minimal'
+          },
+          body: JSON.stringify({
+            customer_name: params.name || 'AiSensy Customer',
+            identifier: customerPhone,
+            lead_source: 'WhatsApp Bot',
+            car_brand: result.brand || 'Unknown',
+            car_model: result.model || 'Unknown',
+            priority: 'Medium',
+            lead_type: 'Fresh Lead',
+            salesperson: 'Choice',
+            notes: `Requested service plan for ${result.brand} ${result.model}`
+          })
+        }).catch(err => console.error('Failed to auto-create lead:', err.message));
+      }
+    }
+
     if (result.found === false) {
       return res.status(404).json(result);
     }
