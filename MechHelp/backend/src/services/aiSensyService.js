@@ -402,6 +402,8 @@ class AISensyService {
 
     return {
       found: true,
+      brand: car.brand,
+      model: car.model,
       confidence_score: car.confidenceScore !== undefined ? car.confidenceScore : bestConfidenceScore,
       matched_model: fullVehicleNameWithYear,
       whatsapp_text: whatsappMessage,

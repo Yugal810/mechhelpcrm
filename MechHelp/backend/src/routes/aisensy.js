@@ -55,8 +55,9 @@ async function handleServicePlans(req, res) {
             car_model: result.model || 'Unknown',
             priority: 'Medium',
             lead_type: 'Fresh Lead',
+            booking_type: 'Service',
             salesperson: 'Choice',
-            notes: `Requested service plan for ${result.brand} ${result.model}`
+            notes: `Requested service plan for ${result.brand || 'Unknown'} ${result.model || 'Unknown'}`
           })
         }).catch(err => console.error('Failed to auto-create lead:', err.message));
       }
