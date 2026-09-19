@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/mechhelp/api/(.*)",
+      "destination": "/api/backend"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
