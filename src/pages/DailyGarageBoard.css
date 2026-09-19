@@ -1,0 +1,838 @@
+/* ═══════════════════════════════════════════════
+   Daily Garage Board — Floor-Level Operational Theme
+   Grounded in MechHelp CRM Design Tokens
+   ═══════════════════════════════════════════════ */
+
+/* ─── Page Shell ──────────────────────────────── */
+.dgb-page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.dgb-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 1rem;
+  padding: 1.25rem 2rem 1rem;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-secondary);
+  flex-shrink: 0;
+}
+
+.dgb-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.dgb-header-title {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+}
+
+.dgb-header-title-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.dgb-header-subtitle {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.dgb-header-right {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.dgb-date-input {
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  padding: 0.45rem 0.75rem;
+  font-size: 0.875rem;
+  font-family: inherit;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: border-color var(--transition-fast);
+}
+
+.dgb-date-input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: var(--shadow-focus);
+}
+
+.dgb-today-btn {
+  padding: 0.45rem 0.875rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  background: var(--bg-tertiary);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.dgb-today-btn:hover {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
+}
+
+.dgb-today-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  pointer-events: none;
+  background: var(--bg-tertiary);
+  border-color: var(--border-light);
+  color: var(--text-muted);
+}
+
+
+/* ─── Board Body & Row Spacing ────────────────── */
+.dgb-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.25rem 2rem 2.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/* ─── Garage Row: Distinct Active vs Empty States ─ */
+.dgb-garage-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.75rem 1.1rem;
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-fast);
+}
+
+/* Active Row: Visible weight, solid surface, clear anchor */
+.dgb-garage-row.has-cars {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  box-shadow: var(--shadow-sm);
+  min-height: 72px;
+}
+
+.dgb-garage-row.has-cars:hover {
+  border-color: var(--border-focus);
+  box-shadow: var(--shadow-md);
+}
+
+/* Empty Row: Recedes visually, compact height, muted line */
+.dgb-garage-row.is-empty {
+  background: transparent;
+  border: 1px dashed var(--border-light);
+  opacity: 0.75;
+  min-height: 52px;
+  padding: 0.5rem 1rem;
+}
+
+.dgb-garage-row.is-empty:hover {
+  opacity: 1;
+  border-style: solid;
+  border-color: var(--border-focus);
+  background: var(--bg-secondary);
+}
+
+/* Garage Anchor Icon & Label */
+.dgb-garage-row-left {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  flex-shrink: 0;
+  min-width: 160px;
+}
+
+.dgb-garage-chip {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  border: 1px solid var(--border-light);
+  flex-shrink: 0;
+}
+
+.dgb-garage-row.has-cars .dgb-garage-chip {
+  background: rgba(59, 130, 246, 0.15);
+  color: #60a5fa;
+  border-color: rgba(59, 130, 246, 0.3);
+}
+
+.dgb-garage-name {
+  font-size: 0.925rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.dgb-garage-row.is-empty .dgb-garage-name {
+  color: var(--text-secondary);
+  font-weight: 600;
+}
+
+/* Middle Inline Cars Container (Flex-wrap) */
+.dgb-garage-row-cars {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.625rem;
+  padding: 0.2rem 0;
+}
+
+.dgb-no-cars-inline {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-style: italic;
+  letter-spacing: 0.01em;
+}
+
+/* Right Side: Unified Action & Counter Group */
+.dgb-garage-row-right {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.dgb-garage-action-group {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  overflow: hidden;
+}
+
+.dgb-create-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.38rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  border: none;
+  background: var(--accent-primary, #ffffff);
+  color: var(--accent-text, #000000);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  white-space: nowrap;
+}
+
+.dgb-create-btn:hover {
+  background: var(--accent-hover, #e5e7eb);
+}
+
+.dgb-garage-count-badge {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  padding: 0.38rem 0.65rem;
+  background: var(--bg-secondary);
+  border-left: 1px solid var(--border-light);
+  white-space: nowrap;
+}
+
+.dgb-garage-row.has-cars .dgb-garage-count-badge {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+/* ─── Car Status Card (Fast Operational Scanning) ─ */
+.dgb-inline-card {
+  display: inline-flex;
+  flex-direction: column;
+  padding: 0.5rem 0.65rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  border-left-width: 5px; /* Dominant visual status strip */
+  background: var(--bg-primary);
+  min-width: 175px;
+  max-width: 215px;
+  position: relative;
+  transition: all var(--transition-fast);
+  box-shadow: var(--shadow-sm);
+}
+
+/* 1. Arrived: Green left bar + Green tint */
+.dgb-inline-card.status-arrived {
+  border-left-color: #34d399; /* Green */
+  background: rgba(52, 211, 153, 0.08);
+}
+
+/* 2. Serviced / Done: Calm Blue left bar + Blue tint (Not red!) */
+.dgb-inline-card.status-done {
+  border-left-color: #60a5fa; /* Blue */
+  background: rgba(96, 165, 250, 0.08);
+}
+
+/* 3. Pending: Amber/Slate left bar + Amber tint */
+.dgb-inline-card.status-pending {
+  border-left-color: #fbbf24; /* Amber */
+  background: rgba(251, 191, 36, 0.06);
+}
+
+.dgb-card-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  width: 100%;
+}
+
+/* Hierarchy: Car Model is Primary for physical shop floor identification */
+.dgb-card-car-model {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
+}
+
+.dgb-card-menu-trigger {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.15rem;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+}
+
+.dgb-card-menu-trigger:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+/* Secondary: Customer Name is smaller */
+.dgb-card-customer {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 0.1rem;
+}
+
+.dgb-card-details-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+
+/* License Plate Badge */
+.dgb-card-plate-badge {
+  font-size: 0.65rem;
+  font-weight: 700;
+  font-family: monospace, monospace;
+  text-transform: uppercase;
+  background: #fef08a;
+  color: #854d0e;
+  border: 1px solid #fde047;
+  padding: 0.1rem 0.35rem;
+  border-radius: var(--radius-sm);
+  letter-spacing: 0.04em;
+}
+
+.dgb-card-plate-none {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-style: italic;
+  opacity: 0.8;
+}
+
+/* Dominant Status Badge Pill */
+.dgb-card-status-pill {
+  font-size: 0.625rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  padding: 0.15rem 0.45rem;
+  border-radius: var(--radius-full);
+  letter-spacing: 0.05em;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.dgb-card-status-pill.pill-arrived {
+  background: rgba(52, 211, 153, 0.2);
+  color: #34d399;
+  border: 1px solid rgba(52, 211, 153, 0.4);
+}
+
+.dgb-card-status-pill.pill-done {
+  background: rgba(96, 165, 250, 0.2);
+  color: #60a5fa;
+  border: 1px solid rgba(96, 165, 250, 0.4);
+}
+
+.dgb-card-status-pill.pill-pending {
+  background: rgba(251, 191, 36, 0.2);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.4);
+}
+
+/* ─── Three-dot Context Popover Menu ───────────── */
+.dgb-card-menu-popover {
+  position: absolute;
+  top: 1.8rem;
+  right: 0.4rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  z-index: 100;
+  min-width: 165px;
+  padding: 0.35rem 0;
+  display: flex;
+  flex-direction: column;
+  animation: dgb-popover-in 100ms ease;
+}
+
+@keyframes dgb-popover-in {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+.dgb-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.45rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  font-family: inherit;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  width: 100%;
+  text-align: left;
+  transition: background var(--transition-fast);
+}
+
+.dgb-menu-item:hover {
+  background: var(--bg-tertiary);
+}
+
+.dgb-menu-item.item-arrived { color: #34d399; }
+.dgb-menu-item.item-done { color: #60a5fa; }
+.dgb-menu-item.item-pending { color: #fbbf24; }
+.dgb-menu-item.item-delete { color: #ef4444; }
+
+.dgb-menu-divider {
+  height: 1px;
+  background: var(--border-light);
+  margin: 0.25rem 0;
+}
+
+/* ─── Delete Confirmation Modal ───────────────── */
+.dgb-confirm-modal {
+  max-width: 380px;
+  text-align: center;
+  padding: 1.5rem 1.25rem 1.25rem;
+}
+
+.dgb-confirm-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.dgb-confirm-icon-wrapper {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--danger-bg);
+  color: var(--danger);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 0.25rem;
+}
+
+.dgb-confirm-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.dgb-confirm-desc {
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.45;
+}
+
+.dgb-confirm-desc strong {
+  color: var(--text-primary);
+}
+
+.dgb-confirm-footer {
+  display: flex;
+  gap: 0.625rem;
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border-light);
+  width: 100%;
+}
+
+.dgb-btn-danger {
+  flex: 1;
+  padding: 0.625rem 1rem;
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--danger);
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.dgb-btn-danger:hover {
+  filter: brightness(1.1);
+  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+}
+
+/* ─── Modal Overlay & Add Car Modal ───────────── */
+.dgb-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+  animation: dgb-fade-in 120ms ease;
+}
+
+@keyframes dgb-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+.dgb-modal {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  width: 100%;
+  max-width: 440px;
+  animation: dgb-slide-up 180ms cubic-bezier(0.34, 1.3, 0.64, 1);
+  overflow: hidden;
+}
+
+@keyframes dgb-slide-up {
+  from { transform: translateY(12px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+
+.dgb-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-light);
+  background: var(--bg-tertiary);
+}
+
+.dgb-modal-title {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.dgb-modal-close {
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--transition-fast);
+}
+
+.dgb-modal-close:hover {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.dgb-modal-body {
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.dgb-modal-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  background: var(--bg-tertiary);
+  padding: 0.25rem;
+  border-radius: var(--radius-md);
+}
+
+.dgb-tab-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.55rem 0.75rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-secondary);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.dgb-tab-btn.is-active {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+
+.dgb-modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.dgb-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.dgb-form-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.dgb-form-input {
+  width: 100%;
+  padding: 0.6rem 0.875rem;
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-md);
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 0.875rem;
+  font-family: inherit;
+  transition: all var(--transition-fast);
+}
+
+.dgb-form-input:hover { border-color: var(--text-muted); }
+.dgb-form-input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  box-shadow: var(--shadow-focus);
+  background: var(--bg-primary);
+}
+.dgb-form-input::placeholder { color: var(--text-muted); }
+
+.dgb-tag-status {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.625rem;
+  padding: 0.75rem;
+  border-radius: var(--radius-md);
+  font-size: 0.825rem;
+  line-height: 1.4;
+}
+
+.dgb-tag-status.found {
+  background: var(--success-bg);
+  color: var(--success);
+  border: 1px solid var(--success);
+}
+
+.dgb-tag-status.not-found {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1px solid var(--danger);
+}
+
+.dgb-switch-custom-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 0.78rem;
+  color: var(--danger);
+  padding: 0;
+  margin-top: 0.35rem;
+  text-decoration: underline;
+  display: block;
+}
+
+.dgb-modal-footer {
+  display: flex;
+  gap: 0.625rem;
+  padding: 0.875rem 1.25rem;
+  border-top: 1px solid var(--border-light);
+  background: var(--bg-tertiary);
+}
+
+.dgb-btn-primary {
+  flex: 1;
+  padding: 0.625rem 1rem;
+  border-radius: var(--radius-md);
+  border: none;
+  background: var(--accent-primary, #ffffff);
+  color: var(--accent-text, #000000);
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+}
+
+.dgb-btn-primary:hover { filter: brightness(0.9); }
+.dgb-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dgb-btn-secondary {
+  padding: 0.625rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-light);
+  background: var(--bg-primary);
+  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 600;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.dgb-btn-secondary:hover {
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+}
+
+.dgb-loading {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1.25rem 2rem;
+}
+
+.dgb-skeleton-row {
+  height: 56px;
+  border-radius: var(--radius-lg);
+  background: linear-gradient(
+    90deg,
+    var(--bg-secondary) 0%,
+    var(--bg-tertiary) 50%,
+    var(--bg-secondary) 100%
+  );
+  background-size: 200% 100%;
+  animation: dgb-shimmer 1.5s infinite;
+}
+
+@keyframes dgb-shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.dgb-empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 4rem 2rem;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.dgb-empty-state svg {
+  opacity: 0.3;
+}
+
+.dgb-empty-state h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.dgb-empty-state p {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  max-width: 260px;
+}

@@ -1,0 +1,194 @@
+/* Garage Settlement Stylesheet */
+
+.settlements-page {
+  width: 100%;
+}
+
+/* Garage Level 1 Grid */
+.garage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 1.5rem;
+}
+
+.garage-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1.5rem;
+  min-height: 160px;
+  cursor: pointer;
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  transition: all var(--transition-fast);
+}
+
+.garage-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--text-secondary);
+  box-shadow: var(--shadow-md);
+}
+
+.garage-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.garage-card-header h3 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+
+.garage-icon {
+  color: var(--text-muted);
+}
+
+.garage-card:hover .garage-icon {
+  color: var(--accent-primary);
+}
+
+.garage-card-body {
+  margin: 1rem 0;
+}
+
+.balance-badge {
+  display: inline-block;
+  font-size: 0.875rem;
+  font-weight: 600;
+  padding: 0.375rem 0.75rem;
+  border-radius: var(--radius-sm);
+  background-color: var(--bg-tertiary);
+}
+
+.balance-badge.text-green {
+  color: var(--success);
+  background-color: var(--success-bg);
+}
+
+.balance-badge.text-red {
+  color: var(--danger);
+  background-color: var(--danger-bg);
+}
+
+.balance-badge.text-gray {
+  color: var(--text-secondary);
+  background-color: var(--bg-tertiary);
+}
+
+.garage-card-footer {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  border-top: 1px solid var(--border-light);
+  padding-top: 0.75rem;
+  margin-top: auto;
+}
+
+/* Level 2: Detailed View Header */
+.detail-header-sticky {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--bg-primary);
+  border-bottom: 1px solid var(--border-light);
+  padding-bottom: 1.25rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.balance-settle-action {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+}
+
+.balance-info-block {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.balance-label {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  letter-spacing: 0.05em;
+}
+
+.balance-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+}
+
+.balance-value.text-green {
+  color: var(--success);
+}
+
+.balance-value.text-red {
+  color: var(--danger);
+}
+
+.balance-value.text-gray {
+  color: var(--text-secondary);
+}
+
+/* Table Row Highlights */
+.settlement-row {
+  cursor: pointer;
+  transition: background-color var(--transition-fast);
+}
+
+.settlement-row:hover {
+  background-color: var(--bg-tertiary) !important;
+}
+
+.row-settled {
+  opacity: 0.85;
+}
+
+.row-unsettled {
+  background-color: rgba(var(--accent-primary), 0.02);
+}
+
+/* Color Helpers */
+.text-green {
+  color: var(--success) !important;
+}
+
+.text-red {
+  color: var(--danger) !important;
+}
+
+.text-gray {
+  color: var(--text-secondary) !important;
+}
+
+/* Modal Layout styles */
+.breakdown-label {
+  display: block;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-bottom: 0.125rem;
+}
+
+@media (max-width: 600px) {
+  .detail-header-sticky {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .balance-settle-action {
+    width: 100%;
+    justify-content: space-between;
+  }
+  
+  .balance-info-block {
+    align-items: flex-start;
+  }
+}
