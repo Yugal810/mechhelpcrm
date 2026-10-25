@@ -157,6 +157,24 @@ class AISensyService {
     const isReferral = flagStr === "true" || flagStr === "1" || flagStr === "yes";
     const discountVal = 200;
 
+    // 1. If phone or name is present, ALWAYS create/update the lead in CRM immediately!
+    // It should not depend on whether the car is found or not, or even if all vehicle variables are empty.
+    if (customerPhone || customerName) {
+      try {
+        await leadService.createOrUpdateLeadFromSearch({
+          customerName,
+          customerPhone,
+          car: null,
+          modelQuery,
+          year,
+          fuelType,
+          selectedPlan,
+        });
+      } catch (leadErr) {
+        console.error("⚠️ Error recording lead in CRM:", leadErr.message);
+      }
+    }
+
     if (!modelQuery && !fuelType && !year) {
       return {
         found: false,

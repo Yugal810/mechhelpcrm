@@ -3,7 +3,6 @@ import { v4 as uuidv4 } from "uuid";
 import dotenv from "dotenv";
 import path from "path";
 import { fileURLToPath } from "url";
-import LeadMeta from "../models/LeadMeta.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -100,15 +99,19 @@ export async function createOrUpdateLeadFromSearch(data = {}) {
     carModel = String(car.model || "").trim();
   } else if (modelQuery) {
     const words = modelQuery.trim().split(" ");
-    carBrand = words[0] || "Unknown";
+    carBrand = words[0] || "";
     carModel = words.slice(1).join(" ").trim();
-    if (!carModel.trim()) carModel = modelQuery.trim();
+    if (!carModel.trim() && words.length === 1) {
+      carModel = words[0];
+    }
   } else {
-    carBrand = "Unknown";
-    carModel = "Unknown";
+    carBrand = "";
+    carModel = "";
   }
   // Strip any 4-digit years from carModel so year is never inserted inside model name
-  carModel = carModel.replace(/\b(19\d{2}|20\d{2})\b/g, "").replace(/\s+/g, " ").trim();
+  if (carModel) {
+    carModel = carModel.replace(/\b(19\d{2}|20\d{2})\b/g, "").replace(/\s+/g, " ").trim();
+  }
 
   const isVip = checkIsPremium(carBrand, carModel);
   const nextFollowUpDate = getTomorrowYmd();
@@ -135,47 +138,28 @@ export async function createOrUpdateLeadFromSearch(data = {}) {
 
         const updatePayload = {
           customer_name: name,
-          car_brand: carBrand,
-          car_model: carModel,
           next_follow_up_date: nextFollowUpDate,
           priority: isVip ? "High" : "Medium",
           is_vip: isVip,
           number_plate: null, // No number plate inserted from referral
-          fuel_type: effectiveFuelType,
+          last_contacted_date: createdDate,
         };
+
+        if (carBrand) updatePayload.car_brand = carBrand;
+        if (carModel) updatePayload.car_model = carModel;
+        if (effectiveFuelType) updatePayload.fuel_type = effectiveFuelType;
+        if (year) updatePayload.custom_year = year;
 
         let { error: updateError } = await supabase
           .from("leads")
           .update(updatePayload)
           .eq("id", existingLead.id);
 
-        if (updateError && updateError.message && updateError.message.includes("fuel_type")) {
-          // Fallback if fuel_type column is not in DB table
-          delete updatePayload.fuel_type;
-          const retry = await supabase
-            .from("leads")
-            .update(updatePayload)
-            .eq("id", existingLead.id);
-          updateError = retry.error;
-        }
-
         if (updateError) {
           console.error("⚠️ Failed to update existing lead:", updateError.message);
         } else {
           console.log(`✅ Successfully updated lead ${existingLead.id}`);
           broadcastLeadChange({ id: existingLead.id, name, identifier: tag, carBrand, carModel, action: "updated" });
-        }
-
-        if (effectiveFuelType && (tag || existingLead.id)) {
-          try {
-            await LeadMeta.findOneAndUpdate(
-              { $or: [{ leadId: existingLead.id }, { identifier: tag }] },
-              { leadId: existingLead.id, identifier: tag, fuelType: effectiveFuelType, customYear: year || "" },
-              { upsert: true, new: true }
-            );
-          } catch (mErr) {
-            console.warn("⚠️ Failed to update LeadMeta in Mongo:", mErr.message);
-          }
         }
 
         return { success: true, leadId: existingLead.id, action: "updated" };
@@ -209,7 +193,8 @@ export async function createOrUpdateLeadFromSearch(data = {}) {
       service_type: ["Service"],
       notes: null, // No notes added through this search as requested
       created_date: createdDate,
-      fuel_type: effectiveFuelType,
+      fuel_type: effectiveFuelType || null,
+      custom_year: year || null,
     };
 
     let { data: insertedData, error: insertError } = await supabase
@@ -218,33 +203,9 @@ export async function createOrUpdateLeadFromSearch(data = {}) {
       .select("id")
       .single();
 
-    if (insertError && insertError.message && insertError.message.includes("fuel_type")) {
-      // Fallback if fuel_type column is not in DB table
-      delete newLead.fuel_type;
-      const retry = await supabase
-        .from("leads")
-        .insert([newLead])
-        .select("id")
-        .single();
-      insertedData = retry.data;
-      insertError = retry.error;
-    }
-
     if (insertError) {
       console.error("⚠️ Failed to insert new lead in Supabase:", insertError.message);
       return { success: false, error: insertError.message };
-    }
-
-    if (effectiveFuelType) {
-      try {
-        await LeadMeta.findOneAndUpdate(
-          { $or: [{ leadId: newLeadId }, { identifier: identifier }] },
-          { leadId: newLeadId, identifier: identifier, fuelType: effectiveFuelType, customYear: year || "" },
-          { upsert: true, new: true }
-        );
-      } catch (mErr) {
-        console.warn("⚠️ Failed to save LeadMeta in Mongo:", mErr.message);
-      }
     }
 
     console.log(`✅ Successfully created new lead ${newLeadId} for customer "${name}" (${identifier})`);
@@ -457,15 +418,6 @@ export async function updateLeadToBooked(bookingData = {}) {
         .update(updatePayload)
         .eq("id", existingLead.id);
 
-      if (updateError && updateError.message && updateError.message.includes("fuel_type")) {
-        delete updatePayload.fuel_type;
-        const retry = await supabase
-          .from("leads")
-          .update(updatePayload)
-          .eq("id", existingLead.id);
-        updateError = retry.error;
-      }
-
       if (updateError) {
         console.error("⚠️ Failed to update lead to Booked:", updateError.message);
         return { success: false, error: updateError.message };
@@ -523,11 +475,6 @@ export async function updateLeadToBooked(bookingData = {}) {
       };
 
       let { error: insertError } = await supabase.from("leads").insert([newLead]);
-      if (insertError && insertError.message && insertError.message.includes("fuel_type")) {
-        delete newLead.fuel_type;
-        const retry = await supabase.from("leads").insert([newLead]);
-        insertError = retry.error;
-      }
 
       if (insertError) {
         console.error("⚠️ Failed to insert new Booked lead:", insertError.message);

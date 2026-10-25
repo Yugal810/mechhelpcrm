@@ -200,14 +200,6 @@ export const LeadService = {
           .range(from, to);
       });
       
-      let backendMeta: Record<string, { fuelType?: string; customYear?: string }> = {};
-      try {
-        const metaRes = await fetch('/api/aisensy/lead-meta');
-        if (metaRes.ok) {
-          backendMeta = await metaRes.json();
-        }
-      } catch (e) {}
-
       const fallbackData = JSON.parse(localStorage.getItem('mechhelp_retarget_fallback') || '{}');
       const detailsSharedFallback = JSON.parse(localStorage.getItem('mechhelp_details_shared_fallback') || '{}');
       const serviceTypeFallback = JSON.parse(localStorage.getItem('mechhelp_service_type_fallback') || '{}');
@@ -222,12 +214,6 @@ export const LeadService = {
         }
         if ((!lead.serviceType || lead.serviceType.length === 0) && serviceTypeFallback[lead.id]) {
           lead.serviceType = serviceTypeFallback[lead.id];
-        }
-        if (!lead.fuelType) {
-          lead.fuelType = backendMeta[lead.id]?.fuelType || backendMeta[lead.identifier]?.fuelType || '';
-        }
-        if (!lead.customYear) {
-          lead.customYear = backendMeta[lead.id]?.customYear || backendMeta[lead.identifier]?.customYear || '';
         }
         return lead;
       });

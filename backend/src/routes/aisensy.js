@@ -1,6 +1,5 @@
 import express from "express";
 import aiSensyService from "../services/aiSensyService.js";
-import LeadMeta from "../models/LeadMeta.js";
 
 const router = express.Router();
 
@@ -101,18 +100,7 @@ router.get("/service-plans", handleServicePlans);
 router.post("/service-plans", handleServicePlans);
 
 router.get("/lead-meta", async (_req, res) => {
-  try {
-    const list = await LeadMeta.find({}).lean();
-    const map = {};
-    for (const item of list) {
-      const payload = { fuelType: item.fuelType || "", customYear: item.customYear || "" };
-      if (item.leadId) map[item.leadId] = payload;
-      if (item.identifier) map[item.identifier] = payload;
-    }
-    res.json(map);
-  } catch (err) {
-    res.json({});
-  }
+  res.json({});
 });
 
 router.get("/nearest-garages", handleNearestGarages);
