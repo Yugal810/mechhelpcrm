@@ -1,10 +1,11 @@
 /**
  * Sound Service for CRM Notifications
- * Plays dedicated MP3 audio files:
- *  - /sounds/new-lead.mp3 for fresh leads
- *  - /sounds/booking.mp3 for confirmed bookings
- * Automatically falls back to Web Audio API chimes if playback is blocked or file is missing.
+ * Uses embedded Base64 audio data URIs for 100% reliable in-memory playback.
+ * Eliminates HTTP network requests, 416 Range errors, and CDN/serverless caching issues.
+ * Automatically falls back to Web Audio API synthesis if browser autoplay restrictions intervene.
  */
+
+import { BOOKING_SOUND_B64, NEW_LEAD_SOUND_B64 } from './audioBase64';
 
 let audioCtx: AudioContext | null = null;
 
@@ -27,19 +28,18 @@ function getAudioContext(): AudioContext | null {
   return audioCtx;
 }
 
-// Preload & Auto-unlock audio on any user interaction
+// Auto-unlock audio playback on user interaction anywhere in the window
 if (typeof window !== 'undefined') {
   const unlock = () => {
     try {
-      const a1 = new Audio('/sounds/new-lead.mp3');
-      const a2 = new Audio('/sounds/booking.mp3');
-      a1.load();
-      a2.load();
-
       const ctx = getAudioContext();
       if (ctx && ctx.state === 'suspended') {
         ctx.resume().catch(() => {});
       }
+      // Pre-warm audio element
+      const dummy = new Audio(NEW_LEAD_SOUND_B64);
+      dummy.volume = 0.01;
+      dummy.play().then(() => dummy.pause()).catch(() => {});
     } catch (e) {
       // Ignored
     }
@@ -50,39 +50,41 @@ if (typeof window !== 'undefined') {
 }
 
 /**
- * Plays the "New Lead" notification sound (/sounds/new-lead.mp3)
+ * Plays the "New Lead" notification sound directly from embedded Base64 MP3
  */
 export function playNewLeadSound() {
   try {
-    const audio = new Audio('/sounds/new-lead.mp3');
+    const audio = new Audio(NEW_LEAD_SOUND_B64);
     audio.volume = 1.0;
     const playPromise = audio.play();
     if (playPromise !== undefined) {
       playPromise.catch((err) => {
-        console.warn('MP3 play error, using fallback chime:', err);
+        console.warn('Base64 lead audio blocked, playing synthetic chime:', err);
         playSyntheticLeadChime();
       });
     }
   } catch (err) {
+    console.warn('Audio creation error, using synthetic fallback:', err);
     playSyntheticLeadChime();
   }
 }
 
 /**
- * Plays the "Booking Confirmed" notification sound (/sounds/booking.mp3)
+ * Plays the "Booking Confirmed" notification sound directly from embedded Base64 MP3
  */
 export function playBookingSound() {
   try {
-    const audio = new Audio('/sounds/booking.mp3');
+    const audio = new Audio(BOOKING_SOUND_B64);
     audio.volume = 1.0;
     const playPromise = audio.play();
     if (playPromise !== undefined) {
       playPromise.catch((err) => {
-        console.warn('MP3 play error, using fallback chime:', err);
+        console.warn('Base64 booking audio blocked, playing synthetic chime:', err);
         playSyntheticBookingChime();
       });
     }
   } catch (err) {
+    console.warn('Audio creation error, using synthetic fallback:', err);
     playSyntheticBookingChime();
   }
 }

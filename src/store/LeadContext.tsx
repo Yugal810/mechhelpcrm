@@ -232,12 +232,64 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // 2. High-reliability polling fallback every 3.5 seconds (zero-flicker background sync)
-    const pollInterval = setInterval(() => {
-      if (mounted) {
-        fetchAllData(true);
+    // 2. High-reliability lightweight polling (checks only top 5 recent leads, ultra fast, no network strain)
+    const pollInterval = setInterval(async () => {
+      if (!mounted || !useSupabase) return;
+      try {
+        const { data: latestRows, error } = await supabase
+          .from('leads')
+          .select('id, customer_name, car_brand, car_model, lead_type, created_date, last_contacted_date, garage_assigned, booking_type')
+          .order('created_date', { ascending: false })
+          .limit(5);
+
+        if (error || !latestRows) return;
+
+        let needsFullRefresh = false;
+        latestRows.forEach((row: any) => {
+          const isBooking = row.lead_type === 'Booked';
+          const notifKey = `${row.id}-${isBooking ? 'booked' : 'lead'}`;
+          const lastNotified = notifiedKeysRef.current.get(notifKey) || 0;
+
+          // Check if created or contacted in the last 2 minutes
+          const times = [
+            row.created_date ? new Date(row.created_date).getTime() : 0,
+            row.last_contacted_date ? new Date(row.last_contacted_date).getTime() : 0,
+          ].filter(t => !isNaN(t) && t > 0);
+          const isRecent = times.length > 0 && (Date.now() - Math.max(...times) < 120000);
+
+          if (isRecent && Date.now() - lastNotified > 10000) {
+            notifiedKeysRef.current.set(notifKey, Date.now());
+            needsFullRefresh = true;
+
+            if (isBooking) {
+              console.log('🚗 Newly confirmed booking detected from poll:', row);
+              playBookingSound();
+              addToast({
+                type: 'success',
+                title: '🚗 Booking Confirmed!',
+                message: `${row.customer_name || 'Customer'} • ${row.garage_assigned || 'Partner Garage'} (${row.booking_type || 'Visit'})`.trim(),
+                duration: 6000,
+              });
+            } else {
+              console.log('🔔 New lead detected from poll:', row);
+              playNewLeadSound();
+              addToast({
+                type: 'success',
+                title: '🔔 New Lead Received!',
+                message: `${row.customer_name || 'New Customer'} • ${row.car_brand || ''} ${row.car_model || ''}`.trim(),
+                duration: 5000,
+              });
+            }
+          }
+        });
+
+        if (needsFullRefresh) {
+          fetchAllData(true);
+        }
+      } catch (err) {
+        console.warn('Lightweight poll error:', err);
       }
-    }, 3500);
+    }, 4000);
 
     return () => {
       mounted = false;
