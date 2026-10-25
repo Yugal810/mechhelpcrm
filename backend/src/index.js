@@ -53,7 +53,7 @@ app.get("/api/health-tool", (_req, res) => {
 const distPath = path.resolve(__dirname, "../../dist");
 if (fs.existsSync(distPath)) {
   app.use(express.static(distPath));
-  app.get("*", (req, res, next) => {
+  app.use((req, res, next) => {
     if (
       req.path.startsWith("/api") ||
       req.path.startsWith("/cars") ||
