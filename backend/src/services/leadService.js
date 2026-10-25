@@ -219,17 +219,19 @@ export async function createOrUpdateLeadFromSearch(data = {}) {
 
 export function parseBookingDate(rawDate) {
   if (!rawDate) return new Date().toISOString().split("T")[0];
-  const s = String(rawDate).trim().toLowerCase();
+  const s = String(rawDate).trim();
   const now = new Date();
 
-  if (s === "today") {
+  // 1. Check for 'today'
+  if (/\btoday\b/i.test(s)) {
     const yyyy = now.getFullYear();
     const mm = String(now.getMonth() + 1).padStart(2, "0");
     const dd = String(now.getDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}`;
   }
 
-  if (s === "tomorrow") {
+  // 2. Check for 'tomorrow'
+  if (/\btomorrow\b/i.test(s)) {
     const tmrw = new Date(now);
     tmrw.setDate(tmrw.getDate() + 1);
     const yyyy = tmrw.getFullYear();
@@ -238,34 +240,44 @@ export function parseBookingDate(rawDate) {
     return `${yyyy}-${mm}-${dd}`;
   }
 
-  // Check DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY
-  const dmyMatch = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
-  if (dmyMatch) {
-    const dd = String(parseInt(dmyMatch[1], 10)).padStart(2, "0");
-    const mm = String(parseInt(dmyMatch[2], 10)).padStart(2, "0");
-    let yyyy = dmyMatch[3];
-    if (yyyy.length === 2) {
-      yyyy = "20" + yyyy;
-    }
-    return `${yyyy}-${mm}-${dd}`;
-  }
-
-  // Check DD-MM or DD/MM
-  const dmMatch = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})$/);
-  if (dmMatch) {
-    const dd = String(parseInt(dmMatch[1], 10)).padStart(2, "0");
-    const mm = String(parseInt(dmMatch[2], 10)).padStart(2, "0");
-    const yyyy = now.getFullYear();
-    return `${yyyy}-${mm}-${dd}`;
-  }
-
-  // Check YYYY-MM-DD
-  const ymdMatch = s.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/);
+  // 3. YYYY-MM-DD or YYYY/MM/DD or YYYY.MM.DD
+  const ymdMatch = s.match(/(?:^|[^\d])(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})(?:[^\d]|$)/);
   if (ymdMatch) {
     const yyyy = ymdMatch[1];
     const mm = String(parseInt(ymdMatch[2], 10)).padStart(2, "0");
     const dd = String(parseInt(ymdMatch[3], 10)).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // 4. DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY
+  const dmyMatch = s.match(/(?:^|[^\d])(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})(?:[^\d]|$)/);
+  if (dmyMatch) {
+    const dd = String(parseInt(dmyMatch[1], 10)).padStart(2, "0");
+    const mm = String(parseInt(dmyMatch[2], 10)).padStart(2, "0");
+    const yyyy = dmyMatch[3];
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // 5. DD-MM-YY or DD/MM/YY or DD.MM.YY (e.g., 26-11-26 or 26/11/26)
+  const dmy2Match = s.match(/(?:^|[^\d])(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2})(?:[^\d]|$)/);
+  if (dmy2Match) {
+    const dd = String(parseInt(dmy2Match[1], 10)).padStart(2, "0");
+    const mm = String(parseInt(dmy2Match[2], 10)).padStart(2, "0");
+    const yyyy = "20" + dmy2Match[3];
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // 6. DD-MM or DD/MM (e.g., 5/11 or 26-11 or 28/11) - exclude dot to avoid matching time like 2.00
+  const dmMatch = s.match(/(?:^|[^\d])(\d{1,2})[\/\-](\d{1,2})(?:[^\d]|$)/);
+  if (dmMatch) {
+    const dVal = parseInt(dmMatch[1], 10);
+    const mVal = parseInt(dmMatch[2], 10);
+    if (mVal >= 1 && mVal <= 12 && dVal >= 1 && dVal <= 31) {
+      const dd = String(dVal).padStart(2, "0");
+      const mm = String(mVal).padStart(2, "0");
+      const yyyy = now.getFullYear();
+      return `${yyyy}-${mm}-${dd}`;
+    }
   }
 
   const parsed = new Date(rawDate);
