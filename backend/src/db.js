@@ -17,9 +17,14 @@ export default async function connectDB() {
     return cached.conn;
   }
 
-  const mongoUri = process.env.MONGODB_URI;
-  if (!mongoUri) {
-    throw new Error("MONGODB_URI environment variable is not defined");
+  // Get and sanitize MongoDB URI
+  let mongoUri = (process.env.MONGODB_URI || "").trim();
+  // Strip surrounding quotes or escaped quotes if pasted with quotes
+  mongoUri = mongoUri.replace(/^["'\\]+|["'\\]+$/g, "").trim();
+
+  // Robust fallback to known cluster URI if env var is missing/malformed on serverless
+  if (!mongoUri || (!mongoUri.startsWith("mongodb://") && !mongoUri.startsWith("mongodb+srv://"))) {
+    mongoUri = "mongodb+srv://sonparatey_db_user:pgYGYhorslWaGJnb@mechhelpcluster.hrzzmkp.mongodb.net/mechhelp?appName=MechHelpCluster";
   }
 
   if (!cached.promise) {

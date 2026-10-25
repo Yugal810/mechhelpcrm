@@ -66,10 +66,10 @@ export const Bookings: React.FC = () => {
     if (searchTerm) {
       const lowerSearch = searchTerm.toLowerCase();
       data = data.filter(l => 
-        l.customerName.toLowerCase().includes(lowerSearch) ||
-        l.carBrand.toLowerCase().includes(lowerSearch) ||
-        l.carModel.toLowerCase().includes(lowerSearch) ||
-        l.identifier.toLowerCase().includes(lowerSearch) ||
+        (l.customerName || "").toLowerCase().includes(lowerSearch) ||
+        (l.carBrand || "").toLowerCase().includes(lowerSearch) ||
+        (l.carModel || "").toLowerCase().includes(lowerSearch) ||
+        (l.identifier || "").toLowerCase().includes(lowerSearch) ||
         (l.garageAssigned && l.garageAssigned.toLowerCase().includes(lowerSearch))
       );
     }

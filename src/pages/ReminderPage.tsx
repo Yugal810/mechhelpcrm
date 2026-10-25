@@ -101,10 +101,10 @@ export const ReminderPage: React.FC<Props> = ({ slot }) => {
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
       data = data.filter(l =>
-        l.customerName.toLowerCase().includes(lower) ||
-        l.identifier.toLowerCase().includes(lower) ||
-        l.carBrand.toLowerCase().includes(lower) ||
-        l.carModel.toLowerCase().includes(lower) ||
+        (l.customerName || "").toLowerCase().includes(lower) ||
+        (l.identifier || "").toLowerCase().includes(lower) ||
+        (l.carBrand || "").toLowerCase().includes(lower) ||
+        (l.carModel || "").toLowerCase().includes(lower) ||
         (l.priority || '').toLowerCase().includes(lower)
       );
     }
