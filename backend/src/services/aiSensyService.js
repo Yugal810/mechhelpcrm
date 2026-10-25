@@ -20,8 +20,8 @@ class AISensyService {
     const sanitizeVal = (val) => {
       if (val === undefined || val === null) return "";
       const str = String(val).trim();
-      // If it is an unreplaced template variable like {{$Name}} or {{$MobileNumber}}
-      if (/^\{\{\s*\$?[a-zA-Z0-9_]+\s*\}\}$/.test(str)) {
+      // If it is an unreplaced template variable like {{$Name}}, {$Name}, {{$MobileNumber}}, {$MobileNumber}
+      if (/^\{{1,2}\s*\$?[a-zA-Z0-9_]+\s*\}{1,2}$/.test(str)) {
         return "";
       }
       return str.replace(/[\{\}\$]/g, "").trim();
@@ -125,6 +125,7 @@ class AISensyService {
         ``,
         bookingResult.garageAssigned ? `📍 Garage: *${bookingResult.garageAssigned}*` : null,
         `📅 Booking Date: *${bookingResult.bookingDate}*`,
+        bookingResult.slot ? `⏰ Preferred Slot: *${bookingResult.slot}*` : null,
         `🚗 Service Mode: *${bookingResult.bookingType}*`,
         ``,
         `Thank you! Your appointment has been booked. Our team will contact you shortly!`,
@@ -136,6 +137,7 @@ class AISensyService {
         found: true,
         status: "Booked",
         booking_date: bookingResult.bookingDate,
+        booking_slot: bookingResult.slot || "",
         booking_type: bookingResult.bookingType,
         garage: bookingResult.garageAssigned,
         whatsapp_text: whatsappText,
