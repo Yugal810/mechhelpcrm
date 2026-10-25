@@ -32,10 +32,36 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
     try {
       setLoading(true);
       const data = await fetchGarages();
-      setGarages(data || []);
-      setError(null);
+      if (Array.isArray(data) && data.length > 0) {
+        setGarages(data);
+        setError(null);
+        return;
+      }
+      throw new Error("No garages returned from API");
     } catch (err) {
-      console.error(err);
+      console.warn("Primary API fetch failed, falling back to database records:", err);
+      try {
+        const { supabase } = await import("../../lib/supabase");
+        const { data: supaGarages } = await supabase.from("garages").select("*");
+        if (supaGarages && supaGarages.length > 0) {
+          setGarages(
+            supaGarages.map((g: any) => ({
+              id: g.id,
+              garage_name: g.name,
+              address: "—",
+              contact: "—",
+              lat: 21.1458,
+              lon: 79.0882,
+              enabled: g.is_active !== false,
+            }))
+          );
+          setError(null);
+          return;
+        }
+      } catch (fallbackErr) {
+        console.error("Fallback garage loading error:", fallbackErr);
+      }
+      setGarages([]);
       setError("Could not load partner garages from database.");
     } finally {
       setLoading(false);
@@ -63,7 +89,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
       setTimeout(() => setMessage(null), 4000);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Failed to add garage.");
+      setError(err?.message || "Failed to add garage.");
     } finally {
       setSubmitting(false);
     }
@@ -82,12 +108,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
     }
   }
 
-  const filteredGarages = garages.filter(
-    (g) =>
-      g.garage_name.toLowerCase().includes(search.toLowerCase()) ||
-      g.address.toLowerCase().includes(search.toLowerCase()) ||
-      g.contact.includes(search)
-  );
+  const filteredGarages = (garages || []).filter((g) => {
+    if (!g) return false;
+    const name = String(g.garage_name || g.name || "").toLowerCase();
+    const addr = String(g.address || "").toLowerCase();
+    const cont = String(g.contact || "").toLowerCase();
+    const s = (search || "").toLowerCase().trim();
+    return name.includes(s) || addr.includes(s) || cont.includes(s);
+  });
 
   return (
     <div className="settings-page">
@@ -221,25 +249,44 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredGarages.map((g) => {
-                    const isEnabled = g.enabled !== false;
+                  {filteredGarages.map((g, idx) => {
+                    const isEnabled =
+                      g.enabled !== false &&
+                      g.is_enabled !== false &&
+                      g.is_active !== false;
+                    const garageId = g.id || g._id || String(idx);
+                    const name = g.garage_name || g.name || "Unnamed Garage";
+                    const addr = g.address || "—";
+                    const cont = g.contact || "—";
+                    const latVal =
+                      typeof g.lat === "number" ? g.lat.toFixed(4) : g.lat || "—";
+                    const lonVal =
+                      typeof g.lon === "number" ? g.lon.toFixed(4) : g.lon || "—";
+
                     return (
                       <tr
-                        key={g.id}
+                        key={garageId}
                         className={isEnabled ? "row-enabled" : "row-disabled"}
                       >
                         <td>
-                          <label className="toggle-switch" title={isEnabled ? "Enabled: included in distance search" : "Disabled: excluded from distance search"}>
+                          <label
+                            className="toggle-switch"
+                            title={
+                              isEnabled
+                                ? "Enabled: included in distance search"
+                                : "Disabled: excluded from distance search"
+                            }
+                          >
                             <input
                               type="checkbox"
                               checked={isEnabled}
-                              onChange={() => handleToggle(g.id)}
+                              onChange={() => handleToggle(garageId)}
                             />
                             <span className="slider round" />
                           </label>
                         </td>
                         <td>
-                          <strong className="garage-title-text">{g.garage_name}</strong>
+                          <strong className="garage-title-text">{name}</strong>
                           <span
                             className={`status-pill ${
                               isEnabled ? "active" : "inactive"
@@ -248,11 +295,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
                             {isEnabled ? "Active in Search" : "Disabled"}
                           </span>
                         </td>
-                        <td className="text-muted">{g.address || "—"}</td>
-                        <td className="text-muted">{g.contact || "—"}</td>
+                        <td className="text-muted">{addr}</td>
+                        <td className="text-muted">{cont}</td>
                         <td className="coords-cell">
                           <code>
-                            {typeof g.lat === "number" ? g.lat.toFixed(4) : g.lat}, {typeof g.lon === "number" ? g.lon.toFixed(4) : g.lon}
+                            {latVal}, {lonVal}
                           </code>
                         </td>
                       </tr>

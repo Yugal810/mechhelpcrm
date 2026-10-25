@@ -26,14 +26,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     async function getInitialSession() {
       try {
         if (supabase?.auth) {
-          const { data } = await supabase.auth.getSession();
+          const { data, error } = await supabase.auth.getSession();
+          if (error) {
+            console.warn('Session refresh error, clearing stale auth session:', error.message);
+            await supabase.auth.signOut().catch(() => {});
+          }
           if (mounted) {
-            setSession(data.session);
-            setUser(data.session?.user ?? null);
+            setSession(data?.session ?? null);
+            setUser(data?.session?.user ?? null);
           }
         }
       } catch (err) {
-        console.error('Error fetching initial session:', err);
+        console.warn('Error fetching initial session:', err);
       } finally {
         if (mounted) {
           setLoading(false);
