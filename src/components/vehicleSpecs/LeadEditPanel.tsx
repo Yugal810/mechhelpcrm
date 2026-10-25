@@ -360,7 +360,7 @@ export const LeadEditPanel: React.FC<LeadEditPanelProps> = ({
               {activeLead
                 ? (!activeLead.customerName && !activeLead.identifier
                     ? 'Fill in the details below to create a new lead'
-                    : `Identifier: ${activeLead.identifier} • Source: ${activeLead.leadSource}`)
+                    : `Phone no.: ${activeLead.identifier} • Source: ${activeLead.leadSource}`)
                 : 'Choose a lead from your CRM database to prefill details & edit'}
             </p>
           </div>
@@ -417,13 +417,13 @@ export const LeadEditPanel: React.FC<LeadEditPanelProps> = ({
               </div>
 
               <div className="lead-field-group">
-                <label>{leadSource === 'SalesIQ' ? 'SalesIQ Tag' : 'Phone / Identifier'}</label>
+                <label>Phone no.</label>
                 <input
                   type="text"
                   className="lead-input"
                   value={identifier}
                   onChange={(e) => setIdentifier(e.target.value)}
-                  placeholder="SalesIQ Tag or Phone"
+                  placeholder="Enter Phone no."
                 />
               </div>
 

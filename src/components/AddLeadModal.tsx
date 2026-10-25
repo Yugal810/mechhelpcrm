@@ -153,11 +153,11 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({ isOpen, onClose, ini
       if (isDup) {
         setErrors(prev => ({
           ...prev,
-          identifier: "This SalesIQ Tag is already in use — each tag must be unique."
+          identifier: "This Phone no. is already in use — each must be unique."
         }));
       } else {
         setErrors(prev => {
-          if (prev.identifier === "This SalesIQ Tag is already in use — each tag must be unique.") {
+          if (prev.identifier === "This Phone no. is already in use — each must be unique.") {
             const next = { ...prev };
             delete next.identifier;
             return next;
@@ -179,7 +179,7 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({ isOpen, onClose, ini
       if (isDup) {
         setErrors(prev => ({
           ...prev,
-          identifier: "This SalesIQ Tag is already in use — each tag must be unique."
+          identifier: "This Phone no. is already in use — each must be unique."
         }));
       }
     }
@@ -195,14 +195,14 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({ isOpen, onClose, ini
 
     if (leadSource === 'SalesIQ') {
       if (!identifier.trim()) {
-        newErrors.identifier = "SalesIQ Tag is required";
+        newErrors.identifier = "Phone no. is required";
       } else {
         const isDup = await LeadService.checkSalesIqTagExists(
           identifier,
           isEditing ? initialData?.id : undefined
         );
         if (isDup) {
-          newErrors.identifier = "This SalesIQ Tag is already in use — each tag must be unique.";
+          newErrors.identifier = "This Phone no. is already in use — each must be unique.";
         }
       }
     }
@@ -307,7 +307,7 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({ isOpen, onClose, ini
         errMsg.toLowerCase().includes('already in use') ||
         errMsg.includes('idx_leads_unique_salesiq_tag')
       ) {
-        setErrors({ identifier: "This SalesIQ Tag is already in use — each tag must be unique." });
+        setErrors({ identifier: "This Phone no. is already in use — each must be unique." });
         const errorElement = document.getElementById('field-identifier');
         if (errorElement) {
           const formGroup = errorElement.closest('.form-group') || errorElement;
@@ -401,7 +401,7 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({ isOpen, onClose, ini
 
             <div className="form-group">
               <label className="form-label">
-                {leadSource === 'SalesIQ' ? 'SalesIQ Tag (Required)' : 'Last 4 Digits of Phone'}
+                {leadSource === 'SalesIQ' ? 'Phone no. (Required)' : 'Last 4 Digits of Phone'}
               </label>
               <input 
                 id="field-identifier"
