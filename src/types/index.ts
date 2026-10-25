@@ -50,7 +50,11 @@ export interface Lead {
   detailsSharedAt?: string | null;
   serviceType?: ServiceType[];
   numberPlate?: string;
+  fuelType?: string;
+  customYear?: string;
   notes: string;
+  rating?: number | null;
+  feedbackNotes?: string | null;
   createdDate: string;
 }
 
@@ -126,7 +130,7 @@ export interface GarageWithBalance {
 }
 
 // Daily Garage Board
-export type DailyGarageEntryStatus = 'pending' | 'arrived' | 'done';
+export type DailyGarageEntryStatus = 'pending' | 'picked_up' | 'arrived' | 'done';
 export type DailyGarageEntrySource = 'salesiq' | 'custom';
 
 export interface DailyGarageEntry {

@@ -12,6 +12,8 @@ const delay = (ms = 300) => new Promise(resolve => setTimeout(resolve, ms));
 // Helper to map DB row to Lead interface
 const mapDbToLead = (row: any): Lead => {
   const salespersonFallback = JSON.parse(localStorage.getItem('mechhelp_salesperson_fallback') || '{}');
+  const fuelTypeFallback = JSON.parse(localStorage.getItem('mechhelp_fuel_type_fallback') || '{}');
+  const customYearFallback = JSON.parse(localStorage.getItem('mechhelp_custom_year_fallback') || '{}');
   return {
     id: row.id,
     customerName: row.customer_name,
@@ -35,7 +37,11 @@ const mapDbToLead = (row: any): Lead => {
     detailsSharedAt: row.details_shared_at || null,
     serviceType: row.service_type || [],
     numberPlate: row.number_plate || '',
+    fuelType: row.fuel_type || row.fuelType || fuelTypeFallback[row.id] || '',
+    customYear: row.custom_year || row.customYear || customYearFallback[row.id] || '',
     notes: row.notes || '',
+    rating: row.rating !== undefined && row.rating !== null ? Number(row.rating) : (JSON.parse(localStorage.getItem('mechhelp_feedback_fallback') || '{}')[row.id]?.rating ?? null),
+    feedbackNotes: row.feedback_notes || JSON.parse(localStorage.getItem('mechhelp_feedback_fallback') || '{}')[row.id]?.feedbackNotes || '',
     createdDate: row.created_date,
     bookingHistory: (row.booking_history || []).map((h: any) => ({
       previousDate: h.previous_date,
@@ -58,32 +64,76 @@ const mapDbToLead = (row: any): Lead => {
   };
 };
 
+// Helper to convert any date string to YYYY-MM-DD
+export const toYmd = (d?: string | null): string => {
+  if (!d) return '';
+  const trimmed = d.trim();
+  if (!trimmed) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+    return trimmed.split('T')[0];
+  }
+  if (/^\d{1,2}[\/-]\d{1,2}[\/-]\d{4}/.test(trimmed)) {
+    const parts = trimmed.split(/[\/-]/);
+    const p1 = parseInt(parts[0], 10);
+    const p2 = parseInt(parts[1], 10);
+    const year = parseInt(parts[2], 10);
+    let day = p1;
+    let month = p2;
+    if (p2 > 12) {
+      day = p2;
+      month = p1;
+    }
+    const mm = String(month).padStart(2, '0');
+    const dd = String(day).padStart(2, '0');
+    return `${year}-${mm}-${dd}`;
+  }
+  const parsed = new Date(trimmed);
+  if (!isNaN(parsed.getTime())) {
+    return parsed.toISOString().split('T')[0];
+  }
+  return '';
+};
+
 // Helper to map Lead interface to DB row
-const mapLeadToDb = (lead: Lead) => ({
-  id: lead.id,
-  customer_name: lead.customerName,
-  lead_source: lead.leadSource,
-  salesperson: lead.salesperson || 'Choice',
-  identifier: lead.identifier,
-  car_brand: lead.carBrand,
-  car_model: lead.carModel,
-  priority: lead.priority,
-  lead_type: lead.leadType,
-  booking_type: lead.bookingType,
-  garage_assigned: lead.garageAssigned,
-  booking_date_time: lead.bookingDateTime,
-  garage_notified: lead.garageNotified,
-  next_follow_up_date: lead.nextFollowUpDate,
-  last_contacted_date: lead.lastContactedDate,
-  is_vip: lead.isVip,
-  whatsapp_broadcast: lead.whatsappBroadcast,
-  retarget_time_slot: lead.retargetTimeSlot || null,
-  details_shared_at: lead.detailsSharedAt || null,
-  service_type: lead.serviceType || [],
-  number_plate: lead.numberPlate || null,
-  notes: lead.notes,
-  created_date: lead.createdDate
-});
+const mapLeadToDb = (lead: Lead) => {
+  const sanitizeDate = (d?: string | null) => {
+    if (!d || !d.trim()) return null;
+    const ymd = toYmd(d);
+    if (ymd) {
+      if (d.includes('T')) return d;
+      return `${ymd}T00:00:00.000Z`;
+    }
+    return null;
+  };
+
+  return {
+    id: lead.id,
+    customer_name: lead.customerName || null,
+    lead_source: lead.leadSource || null,
+    salesperson: lead.salesperson || 'Choice',
+    identifier: lead.identifier || null,
+    car_brand: lead.carBrand || null,
+    car_model: lead.carModel || null,
+    priority: lead.priority || 'Medium',
+    lead_type: lead.leadType || 'Fresh Lead',
+    booking_type: lead.bookingType || null,
+    garage_assigned: lead.garageAssigned || null,
+    booking_date_time: sanitizeDate(lead.bookingDateTime),
+    garage_notified: lead.garageNotified || false,
+    next_follow_up_date: sanitizeDate(lead.nextFollowUpDate),
+    last_contacted_date: sanitizeDate(lead.lastContactedDate),
+    is_vip: lead.isVip || false,
+    whatsapp_broadcast: lead.whatsappBroadcast || false,
+    retarget_time_slot: lead.retargetTimeSlot || null,
+    details_shared_at: sanitizeDate(lead.detailsSharedAt),
+    service_type: lead.serviceType || [],
+    number_plate: lead.numberPlate || null,
+    fuel_type: lead.fuelType || null,
+    custom_year: lead.customYear || null,
+    notes: lead.notes || null,
+    created_date: sanitizeDate(lead.createdDate) || new Date().toISOString()
+  };
+};
 
 // Helper to map Call List DB row to SujalCallListItem
 const mapCallListToDb = (item: SujalCallListItem) => ({
@@ -103,21 +153,61 @@ const mapDbToCallList = (row: any): SujalCallListItem => ({
   linkedLeadId: row.linked_lead_id,
   dateAdded: row.date_added
 });
+/**
+ * Helper to fetch ALL rows from Supabase by auto-paginating in chunks of 1000
+ * using .range(from, to) to bypass Supabase's default 1000-row limit.
+ */
+export async function fetchAllSupabaseRows<T = any>(
+  fetchChunk: (from: number, to: number) => Promise<{ data: T[] | null; error: any }>
+): Promise<T[]> {
+  let allData: T[] = [];
+  let page = 0;
+  const pageSize = 1000;
+  let hasMore = true;
+
+  while (hasMore) {
+    const from = page * pageSize;
+    const to = from + pageSize - 1;
+    const { data, error } = await fetchChunk(from, to);
+    if (error) throw error;
+    if (data && data.length > 0) {
+      allData = allData.concat(data);
+      if (data.length < pageSize) {
+        hasMore = false;
+      } else {
+        page++;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+
+  return allData;
+}
 
 export const LeadService = {
   async getLeads(): Promise<Lead[]> {
     if (useSupabase) {
-      const { data, error } = await supabase
-        .from('leads')
-        .select(`
-          *,
-          booking_history(*),
-          activity_history(*)
-        `)
-        .order('created_date', { ascending: false });
-        
-      if (error) throw error;
+      const data = await fetchAllSupabaseRows(async (from, to) => {
+        return await supabase
+          .from('leads')
+          .select(`
+            *,
+            booking_history(*),
+            activity_history(*)
+          `)
+          .order('created_date', { ascending: false })
+          .range(from, to);
+      });
       
+      let backendMeta: Record<string, { fuelType?: string; customYear?: string }> = {};
+      try {
+        const metaRes = await fetch('/api/aisensy/lead-meta');
+        if (metaRes.ok) {
+          backendMeta = await metaRes.json();
+        }
+      } catch (e) {}
+
       const fallbackData = JSON.parse(localStorage.getItem('mechhelp_retarget_fallback') || '{}');
       const detailsSharedFallback = JSON.parse(localStorage.getItem('mechhelp_details_shared_fallback') || '{}');
       const serviceTypeFallback = JSON.parse(localStorage.getItem('mechhelp_service_type_fallback') || '{}');
@@ -132,6 +222,12 @@ export const LeadService = {
         }
         if ((!lead.serviceType || lead.serviceType.length === 0) && serviceTypeFallback[lead.id]) {
           lead.serviceType = serviceTypeFallback[lead.id];
+        }
+        if (!lead.fuelType) {
+          lead.fuelType = backendMeta[lead.id]?.fuelType || backendMeta[lead.identifier]?.fuelType || '';
+        }
+        if (!lead.customYear) {
+          lead.customYear = backendMeta[lead.id]?.customYear || backendMeta[lead.identifier]?.customYear || '';
         }
         return lead;
       });
@@ -195,31 +291,15 @@ export const LeadService = {
         ? (lead.detailsSharedAt || new Date().toISOString())
         : null;
 
-      const dbLead = {
-        id: newLeadId,
-        user_id: null, // No auth needed
-        customer_name: lead.customerName,
-        lead_source: lead.leadSource,
-        identifier: lead.identifier,
-        car_brand: lead.carBrand,
-        car_model: lead.carModel,
-        priority: lead.priority,
-        lead_type: lead.leadType,
-        booking_type: lead.bookingType,
-        garage_assigned: lead.garageAssigned,
-        garage_id: garageId,
-        booking_date_time: lead.bookingDateTime,
-        garage_notified: lead.garageNotified,
-        next_follow_up_date: lead.nextFollowUpDate,
-        last_contacted_date: lead.lastContactedDate,
-        is_vip: lead.isVip,
-        whatsapp_broadcast: lead.whatsappBroadcast,
-        retarget_time_slot: lead.retargetTimeSlot || null,
-        details_shared_at: detailsSharedAt,
-        service_type: lead.serviceType || [],
-        number_plate: lead.numberPlate || null,
-        notes: lead.notes,
-        created_date: createdDate
+      const dbLead: any = {
+        ...mapLeadToDb({
+          ...lead,
+          id: newLeadId,
+          detailsSharedAt,
+          createdDate
+        }),
+        user_id: null,
+        garage_id: garageId
       };
 
       let { data, error } = await supabase
@@ -232,11 +312,15 @@ export const LeadService = {
         `)
         .single();
 
-      if (error && (error.code === 'PGRST204' || error.message?.includes('retarget_time_slot') || error.message?.includes('details_shared_at') || error.message?.includes('service_type') || error.message?.includes('salesperson'))) {
-        delete (dbLead as any).retarget_time_slot;
-        delete (dbLead as any).details_shared_at;
-        delete (dbLead as any).service_type;
-        delete (dbLead as any).salesperson;
+      if (error) {
+        delete dbLead.retarget_time_slot;
+        delete dbLead.details_shared_at;
+        delete dbLead.service_type;
+        delete dbLead.salesperson;
+        delete dbLead.fuel_type;
+        delete dbLead.custom_year;
+        delete dbLead.rating;
+        delete dbLead.feedback_notes;
         const res = await supabase
           .from('leads')
           .insert([dbLead])
@@ -251,6 +335,18 @@ export const LeadService = {
         
         // Save to fallback overlays so it survives reloads even if DB column is missing
         if (data) {
+          if (lead.fuelType) {
+            const fuelTypeFallback = JSON.parse(localStorage.getItem('mechhelp_fuel_type_fallback') || '{}');
+            fuelTypeFallback[data.id] = lead.fuelType;
+            localStorage.setItem('mechhelp_fuel_type_fallback', JSON.stringify(fuelTypeFallback));
+            data.fuel_type = lead.fuelType;
+          }
+          if (lead.customYear) {
+            const customYearFallback = JSON.parse(localStorage.getItem('mechhelp_custom_year_fallback') || '{}');
+            customYearFallback[data.id] = lead.customYear;
+            localStorage.setItem('mechhelp_custom_year_fallback', JSON.stringify(customYearFallback));
+            data.custom_year = lead.customYear;
+          }
           if (lead.retargetTimeSlot) {
             const fallbackData = JSON.parse(localStorage.getItem('mechhelp_retarget_fallback') || '{}');
             fallbackData[data.id] = lead.retargetTimeSlot;
@@ -325,11 +421,15 @@ export const LeadService = {
         .update(dbLead)
         .eq('id', finalLead.id);
         
-      if (leadError && (leadError.code === 'PGRST204' || leadError.message?.includes('retarget_time_slot') || leadError.message?.includes('details_shared_at') || leadError.message?.includes('service_type') || leadError.message?.includes('salesperson'))) {
+      if (leadError) {
         delete dbLead.retarget_time_slot;
         delete dbLead.details_shared_at;
         delete dbLead.service_type;
         delete dbLead.salesperson;
+        delete dbLead.fuel_type;
+        delete dbLead.custom_year;
+        delete dbLead.rating;
+        delete dbLead.feedback_notes;
         const res = await supabase
           .from('leads')
           .update(dbLead)
@@ -338,6 +438,16 @@ export const LeadService = {
         
         // Save to fallback overlays
         if (!leadError) {
+          if (finalLead.fuelType) {
+            const fuelTypeFallback = JSON.parse(localStorage.getItem('mechhelp_fuel_type_fallback') || '{}');
+            fuelTypeFallback[finalLead.id] = finalLead.fuelType;
+            localStorage.setItem('mechhelp_fuel_type_fallback', JSON.stringify(fuelTypeFallback));
+          }
+          if (finalLead.customYear) {
+            const customYearFallback = JSON.parse(localStorage.getItem('mechhelp_custom_year_fallback') || '{}');
+            customYearFallback[finalLead.id] = finalLead.customYear;
+            localStorage.setItem('mechhelp_custom_year_fallback', JSON.stringify(customYearFallback));
+          }
           if (finalLead.retargetTimeSlot) {
             const fallbackData = JSON.parse(localStorage.getItem('mechhelp_retarget_fallback') || '{}');
             fallbackData[finalLead.id] = finalLead.retargetTimeSlot;
@@ -367,55 +477,65 @@ export const LeadService = {
         }
       }
 
-      if (leadError) throw leadError;
-
-      // 2. Sync Booking History (delete old and re-insert or use upsert)
-      // For simplicity, we can delete all existing and re-insert the current array.
-      const { error: deleteBookingError } = await supabase
-        .from('booking_history')
-        .delete()
-        .eq('lead_id', updatedLead.id);
-      if (deleteBookingError) throw deleteBookingError;
-
-      if (updatedLead.bookingHistory && updatedLead.bookingHistory.length > 0) {
-        const bookingInserts = updatedLead.bookingHistory.map(h => ({
-          lead_id: updatedLead.id,
-          previous_date: h.previousDate,
-          previous_time: h.previousTime,
-          previous_garage: h.previousGarage,
-          new_date: h.newDate,
-          new_time: h.newTime,
-          new_garage: h.newGarage,
-          reason: h.reason,
-          remarks: h.remarks,
-          rescheduled_by: h.rescheduledBy,
-          rescheduled_on: h.rescheduledOn
-        }));
-        const { error: insertBookingError } = await supabase
-          .from('booking_history')
-          .insert(bookingInserts);
-        if (insertBookingError) throw insertBookingError;
+      if (leadError) {
+        console.error('Supabase updateLead error:', leadError);
+        throw leadError;
       }
 
-      // 3. Sync Activity History
-      const { error: deleteActivityError } = await supabase
-        .from('activity_history')
-        .delete()
-        .eq('lead_id', updatedLead.id);
-      if (deleteActivityError) throw deleteActivityError;
+      // 2. Sync Booking History (non-blocking if DB table is unconstrained)
+      try {
+        const { error: deleteBookingError } = await supabase
+          .from('booking_history')
+          .delete()
+          .eq('lead_id', updatedLead.id);
+        if (deleteBookingError) console.warn('Warning deleting booking_history:', deleteBookingError);
 
-      if (updatedLead.activityHistory && updatedLead.activityHistory.length > 0) {
-        const activityInserts = updatedLead.activityHistory.map(a => ({
-          id: a.id || uuidv4(),
-          lead_id: updatedLead.id,
-          timestamp: a.timestamp,
-          outcome: a.outcome,
-          notes: a.notes
-        }));
-        const { error: insertActivityError } = await supabase
+        if (updatedLead.bookingHistory && updatedLead.bookingHistory.length > 0) {
+          const bookingInserts = updatedLead.bookingHistory.map(h => ({
+            lead_id: updatedLead.id,
+            previous_date: h.previousDate,
+            previous_time: h.previousTime,
+            previous_garage: h.previousGarage,
+            new_date: h.newDate,
+            new_time: h.newTime,
+            new_garage: h.newGarage,
+            reason: h.reason,
+            remarks: h.remarks,
+            rescheduled_by: h.rescheduledBy,
+            rescheduled_on: h.rescheduledOn
+          }));
+          const { error: insertBookingError } = await supabase
+            .from('booking_history')
+            .insert(bookingInserts);
+          if (insertBookingError) console.warn('Warning inserting booking_history:', insertBookingError);
+        }
+      } catch (bhErr) {
+        console.warn('Booking history sync error:', bhErr);
+      }
+
+      // 3. Sync Activity History (non-blocking)
+      try {
+        const { error: deleteActivityError } = await supabase
           .from('activity_history')
-          .insert(activityInserts);
-        if (insertActivityError) throw insertActivityError;
+          .delete()
+          .eq('lead_id', updatedLead.id);
+        if (deleteActivityError) console.warn('Warning deleting activity_history:', deleteActivityError);
+
+        if (updatedLead.activityHistory && updatedLead.activityHistory.length > 0) {
+          const activityInserts = updatedLead.activityHistory.map(a => ({
+            id: a.id || uuidv4(),
+            lead_id: updatedLead.id,
+            timestamp: a.timestamp,
+            outcome: a.outcome,
+            notes: a.notes
+          }));
+          const { error: insertActivityError } = await supabase
+            .from('activity_history')
+            .insert(activityInserts);
+          if (insertActivityError) console.warn('Warning inserting activity_history:', insertActivityError);
+        }
+      } catch (ahErr) {
+        console.warn('Activity history sync error:', ahErr);
       }
 
       // 4. Fetch the fully updated lead to return
@@ -445,6 +565,16 @@ export const LeadService = {
 
   async deleteLead(id: string): Promise<void> {
     if (useSupabase) {
+      // 1. Clean up associated records so foreign key constraints are not violated
+      await supabase.from('garage_settlements').delete().eq('lead_id', id);
+      await supabase.from('booking_billing').delete().eq('lead_id', id);
+      await supabase.from('booking_billing').delete().eq('booking_id', id);
+      await supabase.from('daily_garage_board_entries').delete().eq('lead_id', id);
+      await supabase.from('call_list_items').delete().eq('linked_lead_id', id);
+      await supabase.from('booking_history').delete().eq('lead_id', id);
+      await supabase.from('activity_history').delete().eq('lead_id', id);
+
+      // 2. Delete the lead itself
       const { error } = await supabase
         .from('leads')
         .delete()
@@ -463,12 +593,14 @@ export const LeadService = {
 export const CallListService = {
   async getItems(): Promise<SujalCallListItem[]> {
     if (useSupabase) {
-      const { data, error } = await supabase
-        .from('call_list_items')
-        .select('*')
-        .order('date_added', { ascending: false });
+      const data = await fetchAllSupabaseRows(async (from, to) => {
+        return await supabase
+          .from('call_list_items')
+          .select('*')
+          .order('date_added', { ascending: false })
+          .range(from, to);
+      });
         
-      if (error) throw error;
       return (data || []).map(mapDbToCallList);
     } else {
       await delay();
@@ -1125,9 +1257,9 @@ export const SettlementService = {
       };
 
       // final_settlement MUST be in the select so the JS filter (!row.final_settlement) can work.
-      const BASE_SELECT = `id, lead_id, garage_id, net_amount, settled, settled_at, created_at, final_settlement, leads (id, customer_name, booking_date_time, car_brand, car_model, number_plate), booking_billing (id, total_amount, paid_to, status, final_settlement, billing_line_items (id, name, amount, split_enabled, mechhelp_pct, garage_pct))`;
+      const BASE_SELECT = `id, lead_id, garage_id, net_amount, settled, settled_at, created_at, final_settlement, leads (id, customer_name, booking_date_time, car_brand, car_model, number_plate), booking_billing (id, total_amount, paid_to, status, final_settlement, billing_line_items (id, name, amount, split_enabled, mechhelp_pct, garage_pct)), garages (id, name)`;
       const SELECT_WITH_DISCOUNT = BASE_SELECT.replace('total_amount,', 'total_amount, discount,');
-      const LEGACY_SELECT = `id, lead_id, garage_id, net_amount, settled, settled_at, created_at, final_settlement, leads (id, customer_name, booking_date_time, car_brand, car_model), booking_billing (id, total_amount, paid_to, status, final_settlement, billing_line_items (id, name, amount, split_enabled, mechhelp_pct, garage_pct))`;
+      const LEGACY_SELECT = `id, lead_id, garage_id, net_amount, settled, settled_at, created_at, final_settlement, leads (id, customer_name, booking_date_time, car_brand, car_model), booking_billing (id, total_amount, paid_to, status, final_settlement, billing_line_items (id, name, amount, split_enabled, mechhelp_pct, garage_pct)), garages (id, name)`;
 
       let settlements: any[] | null = null;
       const { data: dataWithDiscount, error: errWithDiscount } = await supabase
@@ -1750,19 +1882,27 @@ import type { DailyGarageEntry, DailyGarageEntryStatus, DailyGarageEntrySource }
 
 const DGB_STORAGE_KEY = 'mechhelp_daily_garage_board';
 
-const mapDbToDgbEntry = (row: any): DailyGarageEntry => ({
-  id: row.id,
-  garageId: row.garage_id,
-  customerName: row.customer_name,
-  carName: row.car_name,
-  numberPlate: row.number_plate || undefined,
-  notes: row.notes ?? '',
-  status: (row.status as DailyGarageEntryStatus) ?? 'pending',
-  source: (row.source as DailyGarageEntrySource) ?? 'custom',
-  leadId: row.lead_id || undefined,
-  createdDate: row.created_date,
-  createdAt: row.created_at,
-});
+const mapDbToDgbEntry = (row: any): DailyGarageEntry => {
+  let status: DailyGarageEntryStatus = (row.status as DailyGarageEntryStatus) ?? 'pending';
+  let notes: string = row.notes ?? '';
+  if (notes.startsWith('__STATUS_PICKED_UP__') || row.status === 'picked_up') {
+    status = 'picked_up';
+    notes = notes.replace('__STATUS_PICKED_UP__', '');
+  }
+  return {
+    id: row.id,
+    garageId: row.garage_id,
+    customerName: row.customer_name,
+    carName: row.car_name,
+    numberPlate: row.number_plate || undefined,
+    notes,
+    status,
+    source: (row.source as DailyGarageEntrySource) ?? 'custom',
+    leadId: row.lead_id || undefined,
+    createdDate: row.created_date,
+    createdAt: row.created_at,
+  };
+};
 
 export const DailyGarageBoardService = {
   /**
@@ -1847,6 +1987,9 @@ export const DailyGarageBoardService = {
     id: string,
     patch: Partial<Pick<DailyGarageEntry, 'notes' | 'status' | 'customerName' | 'carName' | 'numberPlate'>>
   ): Promise<DailyGarageEntry> {
+    const isVirtual = id.startsWith('lead-dgb-');
+    const realLeadId = isVirtual ? id.replace('lead-dgb-', '') : null;
+
     if (useSupabase) {
       const dbPatch: any = {};
       if (patch.notes !== undefined) dbPatch.notes = patch.notes;
@@ -1855,27 +1998,176 @@ export const DailyGarageBoardService = {
       if (patch.carName !== undefined) dbPatch.car_name = patch.carName.trim();
       if (patch.numberPlate !== undefined) dbPatch.number_plate = patch.numberPlate.trim() || null;
 
-      const { data: row, error } = await supabase
+      // Helper to update Supabase row with fallback for check constraints on 'picked_up'
+      const executeUpdateWithFallback = async (queryBuilder: any, payload: any, fallbackNotesBase: string = '') => {
+        const { data, error } = await queryBuilder(payload);
+        if (error && error.code === '23514' && payload.status === 'picked_up') {
+          // Schema constraint check failed on picked_up -> fallback to pending + notes prefix
+          const cleanNotes = (payload.notes ?? fallbackNotesBase ?? '').replace('__STATUS_PICKED_UP__', '');
+          const fallbackPayload = {
+            ...payload,
+            status: 'pending',
+            notes: `__STATUS_PICKED_UP__${cleanNotes}`
+          };
+          const fallbackRes = await queryBuilder(fallbackPayload);
+          if (fallbackRes.error) throw fallbackRes.error;
+          return fallbackRes.data;
+        }
+        if (error) throw error;
+        return data;
+      };
+
+      if (isVirtual && realLeadId) {
+        // Try updating by lead_id first
+        const { data: existing } = await supabase
+          .from('daily_garage_board_entries')
+          .select('*')
+          .eq('lead_id', realLeadId)
+          .maybeSingle();
+
+        if (existing) {
+          if (patch.status && patch.status !== 'picked_up' && patch.notes === undefined) {
+            if (existing.notes && existing.notes.startsWith('__STATUS_PICKED_UP__')) {
+              dbPatch.notes = existing.notes.replace('__STATUS_PICKED_UP__', '');
+            }
+          }
+          const row = await executeUpdateWithFallback(
+            (p: any) => supabase.from('daily_garage_board_entries').update(p).eq('id', existing.id).select('*').single(),
+            dbPatch,
+            existing.notes || ''
+          );
+          return mapDbToDgbEntry(row);
+        } else {
+          // Fetch lead details to insert a new DB row
+          const { data: lead } = await supabase
+            .from('leads')
+            .select('*')
+            .eq('id', realLeadId)
+            .maybeSingle();
+
+          let garageId = lead?.garage_id;
+          if (!garageId && lead?.garage_assigned) {
+            const { data: gMatch } = await supabase
+              .from('garages')
+              .select('id')
+              .ilike('name', lead.garage_assigned.trim())
+              .maybeSingle();
+            if (gMatch) garageId = gMatch.id;
+          }
+
+          let initialStatus = patch.status ?? 'pending';
+          let initialNotes = patch.notes ?? lead?.notes ?? '';
+          if (initialStatus === 'picked_up') {
+            // Try inserting picked_up, catch 23514
+            const { data: newRow, error: insertErr } = await supabase
+              .from('daily_garage_board_entries')
+              .insert({
+                garage_id: garageId || lead?.garage_assigned || 'unknown',
+                customer_name: patch.customerName?.trim() || lead?.customer_name || 'Customer',
+                car_name: patch.carName?.trim() || `${lead?.car_brand || ''} ${lead?.car_model || ''}`.trim() || 'Vehicle',
+                number_plate: patch.numberPlate?.trim() || lead?.number_plate || null,
+                notes: initialNotes,
+                status: initialStatus,
+                source: 'salesiq',
+                lead_id: realLeadId,
+                created_date: toYmd(lead?.booking_date_time || lead?.next_follow_up_date) || new Date().toISOString().split('T')[0],
+              })
+              .select('*')
+              .single();
+
+            if (insertErr && insertErr.code === '23514') {
+              const { data: fallbackRow, error: fbErr } = await supabase
+                .from('daily_garage_board_entries')
+                .insert({
+                  garage_id: garageId || lead?.garage_assigned || 'unknown',
+                  customer_name: patch.customerName?.trim() || lead?.customer_name || 'Customer',
+                  car_name: patch.carName?.trim() || `${lead?.car_brand || ''} ${lead?.car_model || ''}`.trim() || 'Vehicle',
+                  number_plate: patch.numberPlate?.trim() || lead?.number_plate || null,
+                  notes: `__STATUS_PICKED_UP__${initialNotes}`,
+                  status: 'pending',
+                  source: 'salesiq',
+                  lead_id: realLeadId,
+                  created_date: toYmd(lead?.booking_date_time || lead?.next_follow_up_date) || new Date().toISOString().split('T')[0],
+                })
+                .select('*')
+                .single();
+              if (fbErr) throw fbErr;
+              return mapDbToDgbEntry(fallbackRow);
+            }
+            if (insertErr) throw insertErr;
+            return mapDbToDgbEntry(newRow);
+          } else {
+            const { data: newRow, error: insertErr } = await supabase
+              .from('daily_garage_board_entries')
+              .insert({
+                garage_id: garageId || lead?.garage_assigned || 'unknown',
+                customer_name: patch.customerName?.trim() || lead?.customer_name || 'Customer',
+                car_name: patch.carName?.trim() || `${lead?.car_brand || ''} ${lead?.car_model || ''}`.trim() || 'Vehicle',
+                number_plate: patch.numberPlate?.trim() || lead?.number_plate || null,
+                notes: initialNotes,
+                status: initialStatus,
+                source: 'salesiq',
+                lead_id: realLeadId,
+                created_date: toYmd(lead?.booking_date_time || lead?.next_follow_up_date) || new Date().toISOString().split('T')[0],
+              })
+              .select('*')
+              .single();
+            if (insertErr) throw insertErr;
+            return mapDbToDgbEntry(newRow);
+          }
+        }
+      }
+
+      // Existing direct entry
+      const { data: currentEntry } = await supabase
         .from('daily_garage_board_entries')
-        .update(dbPatch)
+        .select('notes')
         .eq('id', id)
-        .select('*')
-        .single();
-      if (error) throw error;
+        .maybeSingle();
+
+      if (patch.status && patch.status !== 'picked_up' && patch.notes === undefined) {
+        if (currentEntry?.notes && currentEntry.notes.startsWith('__STATUS_PICKED_UP__')) {
+          dbPatch.notes = currentEntry.notes.replace('__STATUS_PICKED_UP__', '');
+        }
+      }
+
+      const row = await executeUpdateWithFallback(
+        (p: any) => supabase.from('daily_garage_board_entries').update(p).eq('id', id).select('*').single(),
+        dbPatch,
+        currentEntry?.notes || ''
+      );
       return mapDbToDgbEntry(row);
     } else {
       await delay();
       const raw = localStorage.getItem(DGB_STORAGE_KEY);
       const all: DailyGarageEntry[] = raw ? JSON.parse(raw) : [];
-      const idx = all.findIndex(e => e.id === id);
-      if (idx === -1) throw new Error('Entry not found');
-      if (patch.notes !== undefined) all[idx].notes = patch.notes;
-      if (patch.status !== undefined) all[idx].status = patch.status;
-      if (patch.customerName !== undefined) all[idx].customerName = patch.customerName.trim();
-      if (patch.carName !== undefined) all[idx].carName = patch.carName.trim();
-      if (patch.numberPlate !== undefined) all[idx].numberPlate = patch.numberPlate.trim() || undefined;
-      localStorage.setItem(DGB_STORAGE_KEY, JSON.stringify(all));
-      return all[idx];
+      let idx = all.findIndex(e => e.id === id || (realLeadId && e.leadId === realLeadId));
+      if (idx !== -1) {
+        if (patch.notes !== undefined) all[idx].notes = patch.notes;
+        if (patch.status !== undefined) all[idx].status = patch.status;
+        if (patch.customerName !== undefined) all[idx].customerName = patch.customerName.trim();
+        if (patch.carName !== undefined) all[idx].carName = patch.carName.trim();
+        if (patch.numberPlate !== undefined) all[idx].numberPlate = patch.numberPlate.trim() || undefined;
+        localStorage.setItem(DGB_STORAGE_KEY, JSON.stringify(all));
+        return all[idx];
+      } else {
+        const newEntry: DailyGarageEntry = {
+          id: uuidv4(),
+          garageId: 'unknown',
+          customerName: patch.customerName?.trim() || 'Customer',
+          carName: patch.carName?.trim() || 'Vehicle',
+          numberPlate: patch.numberPlate?.trim() || undefined,
+          notes: patch.notes || '',
+          status: patch.status || 'pending',
+          source: 'salesiq',
+          leadId: realLeadId || undefined,
+          createdDate: new Date().toISOString().split('T')[0],
+          createdAt: new Date().toISOString(),
+        };
+        all.push(newEntry);
+        localStorage.setItem(DGB_STORAGE_KEY, JSON.stringify(all));
+        return newEntry;
+      }
     }
   },
 
@@ -1883,18 +2175,31 @@ export const DailyGarageBoardService = {
    * Delete an entry by id.
    */
   async deleteEntry(id: string): Promise<void> {
+    const isVirtual = id.startsWith('lead-dgb-');
+    const realLeadId = isVirtual ? id.replace('lead-dgb-', '') : null;
+
     if (useSupabase) {
-      const { error } = await supabase
-        .from('daily_garage_board_entries')
-        .delete()
-        .eq('id', id);
-      if (error) throw error;
+      if (isVirtual && realLeadId) {
+        const { error } = await supabase
+          .from('daily_garage_board_entries')
+          .delete()
+          .eq('lead_id', realLeadId);
+        if (error) console.warn('Delete entry by lead_id error:', error);
+      } else {
+        const { error } = await supabase
+          .from('daily_garage_board_entries')
+          .delete()
+          .eq('id', id);
+        if (error) throw error;
+      }
     } else {
       await delay();
       const raw = localStorage.getItem(DGB_STORAGE_KEY);
-      const all: DailyGarageEntry[] = raw ? JSON.parse(raw) : [];
-      const filtered = all.filter(e => e.id !== id);
-      localStorage.setItem(DGB_STORAGE_KEY, JSON.stringify(filtered));
+      if (raw) {
+        const all: DailyGarageEntry[] = JSON.parse(raw);
+        const filtered = all.filter(e => e.id !== id && (realLeadId ? e.leadId !== realLeadId : true));
+        localStorage.setItem(DGB_STORAGE_KEY, JSON.stringify(filtered));
+      }
     }
   },
 
@@ -1997,3 +2302,59 @@ export const DailyGarageBoardService = {
   },
 };
 
+
+
+export const FeedbackService = {
+  async updateFeedback(leadId: string, rating: number | null, feedbackNotes: string): Promise<void> {
+    const feedbackFallback = JSON.parse(localStorage.getItem('mechhelp_feedback_fallback') || '{}');
+    feedbackFallback[leadId] = { rating, feedbackNotes, updatedAt: new Date().toISOString() };
+    localStorage.setItem('mechhelp_feedback_fallback', JSON.stringify(feedbackFallback));
+
+    if (useSupabase) {
+      try {
+        const { error } = await supabase
+          .from('leads')
+          .update({
+            rating: rating !== null ? Number(rating) : null,
+            feedback_notes: feedbackNotes || null
+          })
+          .eq('id', leadId);
+
+        if (error) {
+          console.warn('Could not persist feedback to Supabase (run add_feedback_columns.sql if missing):', error.message);
+        }
+      } catch (err: any) {
+        console.warn('Feedback update error:', err.message);
+      }
+    }
+  },
+
+  async getBillingsMap(): Promise<Record<string, { totalAmount: number; paidTo: string }>> {
+    if (useSupabase) {
+      try {
+        const { data, error } = await supabase
+          .from('booking_billing')
+          .select('booking_id, lead_id, total_amount, paid_to');
+        if (error) {
+          console.warn('Could not load billing amounts for feedback:', error.message);
+          return {};
+        }
+        const map: Record<string, { totalAmount: number; paidTo: string }> = {};
+        (data || []).forEach((row: any) => {
+          const key = row.lead_id || row.booking_id;
+          if (key) {
+            map[key] = {
+              totalAmount: Number(row.total_amount) || 0,
+              paidTo: row.paid_to || ''
+            };
+          }
+        });
+        return map;
+      } catch (err: any) {
+        console.warn('Billing map fetch error:', err.message);
+        return {};
+      }
+    }
+    return {};
+  }
+};

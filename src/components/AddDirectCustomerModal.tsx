@@ -9,6 +9,7 @@ interface Props {
   onSaved: () => void;        // called after success so parent can refresh
   garageId: string;
   garageName: string;
+  garages?: { id: string; name: string }[];  // optional: for Master Ledger garage picker
 }
 
 interface TempLineItem {
@@ -26,6 +27,7 @@ export const AddDirectCustomerModal: React.FC<Props> = ({
   onSaved,
   garageId,
   garageName,
+  garages,
 }) => {
   const { finalizeDirectBilling } = useLeadContext();
 
@@ -47,6 +49,11 @@ export const AddDirectCustomerModal: React.FC<Props> = ({
 
   // Section 3
   const [paidTo, setPaidTo] = useState<'garage' | 'mechhelp'>('garage');
+
+  // Garage picker (used when garageId is empty, i.e. Master Ledger)
+  const [pickedGarageId, setPickedGarageId] = useState('');
+  const effectiveGarageId = garageId || pickedGarageId;
+  const effectiveGarageName = garageId ? garageName : (garages?.find(g => g.id === pickedGarageId)?.name || '');
 
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError]       = useState<string | null>(null);
@@ -103,6 +110,7 @@ export const AddDirectCustomerModal: React.FC<Props> = ({
       setError(null);
       setIsSaving(true);
 
+      if (!effectiveGarageId) throw new Error('Please select a garage.');
       if (!customerName.trim()) throw new Error('Customer Name is required.');
       if (lineItems.some(item => !item.name.trim()))
         throw new Error('All line items must have a name.');
@@ -129,8 +137,8 @@ export const AddDirectCustomerModal: React.FC<Props> = ({
         carModel.trim(),
         numberPlate.trim(),
         bookingDate,
-        garageId,
-        garageName,
+        effectiveGarageId,
+        effectiveGarageName,
         formattedItems,
         paidTo,
         discountVal
@@ -160,13 +168,34 @@ export const AddDirectCustomerModal: React.FC<Props> = ({
         </div>
 
         <div className="modal-body" style={{ paddingBottom: '1.5rem' }}>
-          {/* Garage badge — locked */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', borderRadius: '8px', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
-            <Landmark size={16} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
-            <span style={{ color: 'var(--text-muted)' }}>Garage:</span>
-            <strong style={{ color: 'var(--text-primary)' }}>{garageName}</strong>
-            <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: 'var(--text-muted)', background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '4px' }}>locked</span>
-          </div>
+          {/* Garage badge — locked (or picker if Master Ledger) */}
+          {garageId ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.5rem 0.75rem', borderRadius: '8px', backgroundColor: 'var(--bg-secondary)', border: '1px solid var(--border-light)', marginBottom: '1.5rem', fontSize: '0.875rem' }}>
+              <Landmark size={16} style={{ color: 'var(--accent-primary)', flexShrink: 0 }} />
+              <span style={{ color: 'var(--text-muted)' }}>Garage:</span>
+              <strong style={{ color: 'var(--text-primary)' }}>{garageName}</strong>
+              <span style={{ marginLeft: 'auto', fontSize: '0.72rem', color: 'var(--text-muted)', background: 'var(--bg-tertiary)', padding: '2px 6px', borderRadius: '4px' }}>locked</span>
+            </div>
+          ) : (
+            <div style={{ marginBottom: '1.5rem' }}>
+              <label className="form-label" style={{ marginBottom: '0.375rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Landmark size={16} style={{ color: 'var(--accent-primary)' }} />
+                Select Garage *
+              </label>
+              <select
+                className="form-input"
+                value={pickedGarageId}
+                onChange={e => setPickedGarageId(e.target.value)}
+                disabled={isSaving}
+                style={{ fontSize: '0.875rem' }}
+              >
+                <option value="">— Choose a garage —</option>
+                {(garages || []).map(g => (
+                  <option key={g.id} value={g.id}>{g.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
 
           {error && (
             <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', backgroundColor: 'var(--danger-bg)', color: 'var(--danger)', border: '1px solid var(--danger)', padding: '0.75rem', borderRadius: '8px', marginBottom: '1.5rem', fontSize: '0.875rem' }}>

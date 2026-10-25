@@ -34,14 +34,14 @@ export const BookingCalendar: React.FC = () => {
 
   // All bookings from LeadContext (matching Bookings Hub logic)
   const allBookings = useMemo(() => {
-    return leads.filter(l => l.bookingDateTime);
+    return leads.filter(l => l.leadType === 'Booked' || l.bookingDateTime);
   }, [leads]);
 
   // Group bookings by date string (yyyy-MM-dd)
   const bookingsByDate = useMemo(() => {
     const map = new Map<string, Lead[]>();
     allBookings.forEach(lead => {
-      const bDate = parseBookingDate(lead.bookingDateTime);
+      const bDate = parseBookingDate(lead.bookingDateTime || lead.nextFollowUpDate);
       if (!isNaN(bDate.getTime())) {
         const key = format(bDate, 'yyyy-MM-dd');
         if (!map.has(key)) {

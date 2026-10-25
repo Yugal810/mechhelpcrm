@@ -579,7 +579,15 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({ isOpen, onClose, ini
                 <select className="form-select" value={leadType} onChange={e => {
                   const newType = e.target.value as LeadType;
                   setLeadType(newType);
-                  if (newType !== 'Retarget') setRetargetTimeSlot(null);
+                  const todayStr = new Date().toISOString().split('T')[0];
+                  if (newType === 'Booked') {
+                    setBookingDateTime(todayStr);
+                    setNextFollowUpDate(todayStr);
+                  } else if (newType === 'Retarget') {
+                    setNextFollowUpDate(todayStr);
+                  } else {
+                    setRetargetTimeSlot(null);
+                  }
                 }}>
                   {['Fresh Lead', 'Call Not Received', 'Details Shared', 'Shared Quotation', 'Retarget', 'Booked', 'Completed', 'Lost'].map(t => (
                     <option key={t} value={t}>{t}</option>

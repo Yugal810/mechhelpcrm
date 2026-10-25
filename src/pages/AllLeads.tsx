@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useLeadContext } from '../store/LeadContext';
 import { AddLeadModal } from '../components/AddLeadModal';
+import { FullPageLeadEdit } from '../components/FullPageLeadEdit';
 import { ServiceTypeBadge } from '../components/ServiceTypeBadge';
 import { LeadNoteButton } from '../components/LeadNoteButton';
 import { Edit, Search, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -12,18 +13,19 @@ import type { Lead } from '../types';
 export const AllLeads: React.FC = () => {
   const { leads, deleteLead } = useLeadContext();
   const [searchParams] = useSearchParams();
-  
+
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStage, setFilterStage] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
   const [filterServiceType, setFilterServiceType] = useState('');
   const [specialFilter, setSpecialFilter] = useState('all');
-  
+
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
-  
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | undefined>(undefined);
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
 
   const today = startOfToday();
 
@@ -39,7 +41,7 @@ export const AllLeads: React.FC = () => {
 
     // Apply special URL filters
     if (specialFilter === 'calls-due-today') {
-      data = data.filter(l => 
+      data = data.filter(l =>
         !['Booked', 'Completed', 'Lost'].includes(l.leadType) &&
         new Date(l.nextFollowUpDate) <= today
       );
@@ -71,8 +73,8 @@ export const AllLeads: React.FC = () => {
     // Apply search
     if (searchTerm) {
       const lower = searchTerm.toLowerCase();
-      data = data.filter(l => 
-        l.customerName.toLowerCase().includes(lower) || 
+      data = data.filter(l =>
+        l.customerName.toLowerCase().includes(lower) ||
         l.identifier.toLowerCase().includes(lower) ||
         l.carBrand.toLowerCase().includes(lower) ||
         l.carModel.toLowerCase().includes(lower) ||
@@ -95,11 +97,17 @@ export const AllLeads: React.FC = () => {
   const currentData = filteredData.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   const handleEdit = (lead: Lead) => {
-    setSelectedLead(lead);
-    setIsModalOpen(true);
+    setEditingLead(lead);
   };
 
-
+  if (editingLead) {
+    return (
+      <FullPageLeadEdit
+        lead={editingLead}
+        onClose={() => setEditingLead(null)}
+      />
+    );
+  }
 
   return (
     <div className="all-leads animate-fade-in">
@@ -114,16 +122,16 @@ export const AllLeads: React.FC = () => {
         <div style={{ display: 'flex', gap: '1rem', flex: 1, minWidth: '300px' }}>
           <div style={{ position: 'relative', flex: 1, maxWidth: '400px' }}>
             <Search size={18} style={{ position: 'absolute', left: '1rem', top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-            <input 
-              type="text" 
-              className="form-input" 
-              placeholder="Search by Name, Identifier, or Car..." 
+            <input
+              type="text"
+              className="form-input"
+              placeholder="Search by Name, Identifier, or Car..."
               value={searchTerm}
               onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
               style={{ paddingLeft: '2.5rem' }}
             />
           </div>
-          
+
           <select className="form-select" style={{ width: 'auto' }} value={filterStage} onChange={e => { setFilterStage(e.target.value); setCurrentPage(1); }}>
             <option value="">All Stages</option>
             {['Fresh Lead', 'Call Not Received', 'Details Shared', 'Shared Quotation', 'Retarget', 'Booked', 'Completed', 'Lost'].map(s => (
@@ -151,7 +159,7 @@ export const AllLeads: React.FC = () => {
             </button>
           )}
         </div>
-        
+
         <div style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
           Showing {filteredData.length} leads
         </div>
@@ -175,7 +183,13 @@ export const AllLeads: React.FC = () => {
               <tr key={lead.id}>
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-                    <strong>{lead.customerName || 'Unknown'}</strong>
+                    <strong
+                      style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                      onClick={() => handleEdit(lead)}
+                      title="Click to edit lead"
+                    >
+                      {lead.customerName || 'Unknown'}
+                    </strong>
                     {lead.isVip && <span className="badge badge-vip">VIP</span>}
                     <ServiceTypeBadge serviceType={lead.serviceType} compact />
                   </div>
@@ -183,7 +197,7 @@ export const AllLeads: React.FC = () => {
                     {lead.priority === 'High' ? '🔴 High' : lead.priority === 'Low' ? '🟢 Low' : '🟡 Medium'}
                   </div>
                 </td>
-                <td>{lead.identifier} <br/><small className="text-muted">({lead.leadSource})</small></td>
+                <td>{lead.identifier} <br /><small className="text-muted">({lead.leadSource})</small></td>
                 <td>{lead.carBrand} {lead.carModel}</td>
                 <td><span className="badge badge-gray">{lead.leadType}</span></td>
                 <td><LeadNoteButton lead={lead} /></td>
@@ -210,22 +224,22 @@ export const AllLeads: React.FC = () => {
             )}
           </tbody>
         </table>
-        
+
         {totalPages > 1 && (
           <div style={{ padding: '1rem', borderTop: '1px solid var(--border-light)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)' }}>
               Page {currentPage} of {totalPages}
             </span>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
-              <button 
-                className="btn btn-secondary btn-icon" 
+              <button
+                className="btn btn-secondary btn-icon"
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage(prev => prev - 1)}
               >
                 <ChevronLeft size={18} />
               </button>
-              <button 
-                className="btn btn-secondary btn-icon" 
+              <button
+                className="btn btn-secondary btn-icon"
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage(prev => prev + 1)}
               >
@@ -235,11 +249,11 @@ export const AllLeads: React.FC = () => {
           </div>
         )}
       </div>
-      
+
       {isModalOpen && (
-        <AddLeadModal 
-          isOpen={isModalOpen} 
-          onClose={() => { setIsModalOpen(false); setSelectedLead(undefined); }} 
+        <AddLeadModal
+          isOpen={isModalOpen}
+          onClose={() => { setIsModalOpen(false); setSelectedLead(undefined); }}
           initialData={selectedLead}
         />
       )}

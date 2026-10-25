@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useLeadContext } from '../store/LeadContext';
 import { useTheme } from '../store/ThemeContext';
 import { CallOutcomeModal } from './CallOutcomeModal';
@@ -10,7 +10,12 @@ import './StickyHeader.css';
 import { isToday, isTomorrow, isBefore, startOfToday } from 'date-fns';
 
 export const StickyHeader: React.FC = () => {
-  const { leads, isLoading } = useLeadContext();
+  const location = useLocation();
+  const { leads, isLoading, isEditingLead } = useLeadContext();
+
+  if (isEditingLead || location.pathname === '/vehicle-specs') {
+    return null;
+  }
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 

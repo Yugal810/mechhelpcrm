@@ -11,6 +11,9 @@ import {
   AlertCircle,
   CalendarDays,
   History,
+  Sparkles,
+  CheckCircle2,
+  RefreshCw,
 } from 'lucide-react';
 import { useLeadContext } from '../store/LeadContext';
 import { DailyQuicksService } from '../utils/dailyQuicksService';
@@ -38,12 +41,12 @@ const STAT_CARDS: StatCardConfig[] = [
 ];
 
 const SECTION_CONFIG = [
-  { key: 'todaysCalls' as const, title: "Today's Calls" },
-  { key: 'todaysBookings' as const, title: "Today's Bookings" },
-  { key: 'tomorrowsBookings' as const, title: "Tomorrow's Bookings" },
-  { key: 'rescheduledBookings' as const, title: 'Rescheduled Bookings' },
-  { key: 'garageNotifications' as const, title: 'Garage Notifications' },
-  { key: 'vipCustomers' as const, title: 'VIP Customers' },
+  { key: 'todaysCalls' as const, title: "Today's Calls", icon: <Phone size={16} /> },
+  { key: 'todaysBookings' as const, title: "Today's Bookings", icon: <Calendar size={16} /> },
+  { key: 'tomorrowsBookings' as const, title: "Tomorrow's Bookings", icon: <CalendarClock size={16} /> },
+  { key: 'rescheduledBookings' as const, title: 'Rescheduled Bookings', icon: <RotateCcw size={16} /> },
+  { key: 'garageNotifications' as const, title: 'Garage Notifications', icon: <BellRing size={16} /> },
+  { key: 'vipCustomers' as const, title: 'VIP Customers', icon: <Star size={16} /> },
 ];
 
 const StatCardSkeleton: React.FC = () => (
@@ -56,20 +59,35 @@ const SectionSkeleton: React.FC = () => (
 
 const EntryTable: React.FC<{ entries: DailyQuicksEntry[] }> = ({ entries }) => {
   if (entries.length === 0) {
-    return <div className="daily-quicks-empty">No entries for this section.</div>;
+    return (
+      <div className="daily-quicks-empty">
+        <CheckCircle2 size={24} strokeWidth={1.5} className="empty-icon" />
+        <span>No entries for this section</span>
+      </div>
+    );
   }
 
   return (
-    <table className="daily-quicks-mini-table">
-      <tbody>
-        {entries.map((entry) => (
-          <tr key={`${entry.customerName}-${entry.identifier}`}>
-            <td>{entry.customerName}</td>
-            <td className="identifier-col">{entry.identifier}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="daily-quicks-list-container">
+      {entries.map((entry, idx) => {
+        const rawName = (entry.customerName || '').trim();
+        const isCleanName = rawName && !/^[.\,\s\-_]+$/.test(rawName);
+        const displayName = isCleanName ? rawName : (entry.identifier || 'Direct Customer');
+
+        return (
+          <div key={`${entry.identifier}-${idx}`} className="daily-quicks-entry-row">
+            <span className="daily-quicks-entry-name" title={displayName}>
+              {displayName}
+            </span>
+            {entry.identifier && (
+              <span className="daily-quicks-entry-id" title={entry.identifier}>
+                {entry.identifier}
+              </span>
+            )}
+          </div>
+        );
+      })}
+    </div>
   );
 };
 
@@ -77,9 +95,8 @@ export const DailyQuicks: React.FC = () => {
   const { leads, isLoading: leadsLoading } = useLeadContext();
   const today = toISTDateString();
 
-  const [selectedDate, setSelectedDate] = useState(today);
+  const selectedDate = today;
   const [storedSummary, setStoredSummary] = useState<StoredDailySummary | null>(null);
-  const [previousSummaries, setPreviousSummaries] = useState<StoredDailySummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -87,12 +104,8 @@ export const DailyQuicks: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const [summary, allSummaries] = await Promise.all([
-        DailyQuicksService.getSummaryForDate(date, leads),
-        DailyQuicksService.listSummaries(60),
-      ]);
+      const summary = await DailyQuicksService.getSummaryForDate(date, leads);
       setStoredSummary(summary);
-      setPreviousSummaries(allSummaries);
     } catch (err) {
       console.error('Failed to load Daily Quicks', err);
       setError('Unable to load Daily Quicks summary. Please try again.');
@@ -111,10 +124,30 @@ export const DailyQuicks: React.FC = () => {
 
   return (
     <div className="daily-quicks animate-fade-in">
-      <div className="dashboard-header">
-        <div>
+      <div className="daily-quicks-hero">
+        <div className="daily-quicks-hero-left">
+          <div className="daily-quicks-badge">
+            <Sparkles size={14} /> Morning Command Center
+          </div>
           <h1>Daily Quicks</h1>
-          <p>Your morning command center — one summary for dashboard and email</p>
+          <p>Real-time operational summary & briefing for sales & service teams</p>
+        </div>
+
+        <div className="daily-quicks-hero-right">
+          {summary && !isLoading && (
+            <div className="daily-quicks-date-pill">
+              <CalendarDays size={15} />
+              <span>{isToday ? 'Live Today' : 'Archive'} · {formatISTDisplayDate(summary.date)}</span>
+            </div>
+          )}
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            onClick={() => loadData(selectedDate)}
+            title="Refresh calculations"
+          >
+            <RefreshCw size={14} className={isLoading ? 'spin' : ''} /> Refresh
+          </button>
         </div>
       </div>
 
@@ -125,18 +158,6 @@ export const DailyQuicks: React.FC = () => {
           <button type="button" className="btn btn-secondary btn-sm" onClick={() => loadData(selectedDate)}>
             Retry
           </button>
-        </div>
-      )}
-
-      {summary && !isLoading && (
-        <div className="daily-quicks-date-badge">
-          <CalendarDays size={16} />
-          {isToday ? 'Today' : 'Archive'} — {formatISTDisplayDate(summary.date)}
-          {storedSummary?.generatedAt && (
-            <span style={{ color: 'var(--text-muted)', marginLeft: '0.5rem' }}>
-              · Generated {new Date(storedSummary.generatedAt).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
-            </span>
-          )}
         </div>
       )}
 
@@ -176,7 +197,10 @@ export const DailyQuicks: React.FC = () => {
               return (
                 <div key={section.key} className="daily-quicks-section surface-panel">
                   <div className="daily-quicks-section-header">
-                    <h2>{section.title}</h2>
+                    <div className="daily-quicks-section-title">
+                      <span className="section-icon">{section.icon}</span>
+                      <h2>{section.title}</h2>
+                    </div>
                     <span className="daily-quicks-section-count">{entries.length}</span>
                   </div>
                   <EntryTable entries={entries} />
@@ -189,36 +213,6 @@ export const DailyQuicks: React.FC = () => {
         <div className="empty-state">
           <History size={32} />
           <p>No summary available for {formatISTDisplayDate(selectedDate)}.</p>
-        </div>
-      )}
-
-      {previousSummaries.length > 0 && (
-        <div className="daily-quicks-previous">
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem' }}>
-            <h2 className="section-title" style={{ marginBottom: 0 }}>Summary History</h2>
-            {!isToday && (
-              <button type="button" className="btn btn-secondary btn-sm" onClick={() => setSelectedDate(today)}>
-                Back to Today
-              </button>
-            )}
-          </div>
-          <div className="daily-quicks-previous-list">
-            {previousSummaries.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                className={`daily-quicks-previous-item ${selectedDate === item.date ? 'active' : ''}`}
-                onClick={() => setSelectedDate(item.date)}
-              >
-                <span className="daily-quicks-previous-date">
-                  {formatISTDisplayDate(item.date)}
-                </span>
-                <span className="daily-quicks-previous-meta">
-                  {item.summary.stats.totalLeads} leads · {item.summary.stats.callsDueToday} calls due
-                </span>
-              </button>
-            ))}
-          </div>
         </div>
       )}
     </div>

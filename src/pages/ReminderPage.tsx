@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { useLeadContext } from '../store/LeadContext';
 import { AddLeadModal } from '../components/AddLeadModal';
+import { FullPageLeadEdit } from '../components/FullPageLeadEdit';
 import { ServiceTypeBadge } from '../components/ServiceTypeBadge';
 import { LeadNoteButton } from '../components/LeadNoteButton';
 import { Edit, Search, Sun, Moon, PhoneForwarded, FileText } from 'lucide-react';
@@ -26,6 +27,7 @@ export const ReminderPage: React.FC<Props> = ({ slot }) => {
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | undefined>(undefined);
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
 
   const today = startOfToday();
 
@@ -111,9 +113,17 @@ export const ReminderPage: React.FC<Props> = ({ slot }) => {
   }, [leads, filterPriority, filterStaleness, searchTerm, slot, today]);
 
   const handleEdit = (lead: Lead) => {
-    setSelectedLead(lead);
-    setIsModalOpen(true);
+    setEditingLead(lead);
   };
+
+  if (editingLead) {
+    return (
+      <FullPageLeadEdit
+        lead={editingLead}
+        onClose={() => setEditingLead(null)}
+      />
+    );
+  }
 
   const isMorning = slot === 'morning';
   const isEvening = slot === 'evening';
@@ -122,18 +132,18 @@ export const ReminderPage: React.FC<Props> = ({ slot }) => {
   const title = isMorning
     ? "Today's Reminder: Morning"
     : isEvening
-    ? "Today's Reminder: Evening"
-    : isDetailsShared
-    ? "Detail Shared Reminders"
-    : "Quotation Reminders";
+      ? "Today's Reminder: Evening"
+      : isDetailsShared
+        ? "Detail Shared Reminders"
+        : "Quotation Reminders";
 
   const subtitle = isMorning
     ? 'Retarget callbacks preferred during morning hours'
     : isEvening
-    ? 'Retarget callbacks preferred during evening hours'
-    : isDetailsShared
-    ? 'Leads in "Details Shared" stage for 3 or more days needing follow-up'
-    : 'All leads currently in "Shared Quotation" stage';
+      ? 'Retarget callbacks preferred during evening hours'
+      : isDetailsShared
+        ? 'Leads in "Details Shared" stage for 3 or more days needing follow-up'
+        : 'All leads currently in "Shared Quotation" stage';
 
   const Icon = isMorning ? Sun : isEvening ? Moon : isDetailsShared ? PhoneForwarded : FileText;
   const iconClass = isMorning ? 'text-warning' : isEvening ? 'text-primary' : isDetailsShared ? 'text-accent' : 'text-info';
@@ -214,7 +224,13 @@ export const ReminderPage: React.FC<Props> = ({ slot }) => {
                 <tr key={lead.id}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-                      <strong>{lead.customerName || 'Unknown'}</strong>
+                      <strong
+                        style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                        onClick={() => handleEdit(lead)}
+                        title="Click to edit lead"
+                      >
+                        {lead.customerName || 'Unknown'}
+                      </strong>
                       {lead.isVip && <span className="badge badge-vip">VIP</span>}
                       <ServiceTypeBadge serviceType={lead.serviceType} compact />
                     </div>
@@ -229,12 +245,12 @@ export const ReminderPage: React.FC<Props> = ({ slot }) => {
                       {slot === 'details-shared'
                         ? '📋 Details Shared'
                         : slot === 'shared-quotation'
-                        ? '📄 Shared Quotation'
-                        : lead.retargetTimeSlot === 'morning'
-                        ? '☀️ Morning'
-                        : lead.retargetTimeSlot === 'evening'
-                        ? '🌙 Evening'
-                        : lead.leadType}
+                          ? '📄 Shared Quotation'
+                          : lead.retargetTimeSlot === 'morning'
+                            ? '☀️ Morning'
+                            : lead.retargetTimeSlot === 'evening'
+                              ? '🌙 Evening'
+                              : lead.leadType}
                     </span>
                   </td>
                   <td><LeadNoteButton lead={lead} /></td>
@@ -270,8 +286,8 @@ export const ReminderPage: React.FC<Props> = ({ slot }) => {
                   {slot === 'details-shared'
                     ? 'No leads in Details Shared stage for 3+ days.'
                     : slot === 'shared-quotation'
-                    ? 'No leads currently in Shared Quotation stage.'
-                    : `No ${isMorning ? 'morning' : 'evening'} reminders for today.`}
+                      ? 'No leads currently in Shared Quotation stage.'
+                      : `No ${isMorning ? 'morning' : 'evening'} reminders for today.`}
                 </td>
               </tr>
             )}

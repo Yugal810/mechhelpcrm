@@ -1,0 +1,14 @@
+services:
+  mechhelpcrm:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: mechhelp-crm
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - NODE_ENV=production
+      - PORT=8000
+    env_file:
+      - .env

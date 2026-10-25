@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useLeadContext } from '../store/LeadContext';
 import { ChevronLeft, Landmark, FileText, CheckCircle2, ShieldAlert, Plus, Trash2, X as XIcon, Printer, UserPlus, Pencil } from 'lucide-react';
@@ -18,6 +18,8 @@ interface GarageItem {
 interface SettlementDetail {
   id: string;
   leadId?: string;
+  garageId?: string;
+  garageName?: string;
   netAmount: number;
   settled: boolean;
   settledAt?: string;
@@ -352,9 +354,24 @@ export const GarageSettlement: React.FC = () => {
   const [activeGarageName, setActiveGarageName] = useState<string>('');
   const [selectedSettlement, setSelectedSettlement] = useState<SettlementDetail | null>(null);
   const [editingSettlement, setEditingSettlement] = useState<SettlementDetail | null>(null);
+  // Multi-select for print
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const lastClickedIdxRef = useRef<number | null>(null);
 
   // Whether the currently active view is the MechHelp master ledger (not a real garage)
   const isMasterLedger = activeGarageId === 'MECHHELP_MASTER';
+
+  const getRowGarageName = (s: SettlementDetail) => {
+    if (s.garageName) return s.garageName;
+    if (s.garageId) {
+      const g = garages.find(item => item.id === s.garageId);
+      if (g) return g.name;
+    }
+    if (!isMasterLedger && activeGarageName) {
+      return activeGarageName;
+    }
+    return '';
+  };
 
   // Data states
   const [garages, setGarages] = useState<GarageItem[]>([]);
@@ -788,6 +805,114 @@ export const GarageSettlement: React.FC = () => {
     });
   };
 
+  // ─── Row selection helpers ──────────────────────────────────────────────────
+  const handleRowCheckbox = (id: string, index: number, shiftKey: boolean) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (shiftKey && lastClickedIdxRef.current !== null) {
+        const from = Math.min(lastClickedIdxRef.current, index);
+        const to = Math.max(lastClickedIdxRef.current, index);
+        const anchorId = filteredSettlements[lastClickedIdxRef.current]?.id;
+        const shouldSelect = anchorId ? prev.has(anchorId) : true;
+        for (let i = from; i <= to; i++) {
+          const sid = filteredSettlements[i]?.id;
+          if (sid) { if (shouldSelect) next.add(sid); else next.delete(sid); }
+        }
+      } else {
+        if (next.has(id)) next.delete(id); else next.add(id);
+        lastClickedIdxRef.current = index;
+      }
+      return next;
+    });
+    if (!shiftKey) lastClickedIdxRef.current = index;
+  };
+
+  const handleSelectAll = () => {
+    const printable = filteredSettlements.filter(s => s.billing);
+    const allSelected = printable.length > 0 && printable.every(s => selectedIds.has(s.id));
+    if (allSelected) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(printable.map(s => s.id)));
+    }
+    lastClickedIdxRef.current = null;
+  };
+
+  const handlePrintSelected = () => {
+    const toPrint = filteredSettlements.filter(s => selectedIds.has(s.id));
+    if (toPrint.length === 0) return;
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      addToast({ type: 'warning', title: 'Popup Blocked', message: 'Please allow popups to generate the settlement print document.' });
+      return;
+    }
+    const dateRangeStr = filterDate
+      ? new Date(filterDate).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })
+      : 'All Time';
+    const sharedStyles = `
+      body { font-family: 'Inter', system-ui, sans-serif; color: #111827; margin: 0; padding: 40px; background: #fff; }
+      @page { margin: 15mm; size: A4 portrait; }
+      .header-container { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #e5e7eb; padding-bottom: 20px; margin-bottom: 30px; }
+      .header-title { margin: 0 0 5px 0; font-size: 24px; color: #111827; }
+      .header-subtitle { margin: 0; font-size: 14px; color: #4b5563; }
+      .summary-box { background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 8px; padding: 15px; margin-bottom: 30px; display: flex; gap: 30px; }
+      .summary-item { display: flex; flex-direction: column; }
+      .summary-item-label { font-size: 12px; text-transform: uppercase; color: #6b7280; font-weight: 600; margin-bottom: 4px; }
+      .summary-item-value { font-size: 18px; font-weight: 700; color: #111827; }
+      .summary-item-value.positive { color: #16a34a; } .summary-item-value.negative { color: #dc2626; }
+      .record-card { border: 1px solid #e5e7eb; border-radius: 8px; margin-bottom: 20px; page-break-inside: avoid; }
+      .record-header { background: #f9fafb; padding: 10px 15px; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; border-radius: 8px 8px 0 0; }
+      .record-date { font-weight: 600; font-size: 14px; color: #111827; } .record-type { font-size: 12px; font-weight: 600; padding: 2px 8px; border-radius: 12px; background: #e5e7eb; color: #374151; }
+      .record-body { padding: 15px; }
+      .info-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; margin-bottom: 15px; }
+      .info-item { font-size: 13px; display: flex; flex-direction: column; } .info-item span { color: #6b7280; font-size: 11px; text-transform: uppercase; font-weight: 600; margin-bottom: 2px; }
+      table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 15px; }
+      th { text-align: left; background: #f9fafb; padding: 8px; border-bottom: 1px solid #e5e7eb; color: #4b5563; font-weight: 600; }
+      td { padding: 8px; border-bottom: 1px solid #f3f4f6; }
+      .totals-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; background: #f9fafb; padding: 15px; border-radius: 6px; font-size: 13px; }
+      .totals-row { display: flex; justify-content: space-between; margin-bottom: 6px; } .totals-row.bold { font-weight: 700; color: #111827; }
+      .divider { height: 1px; background: #e5e7eb; margin: 10px 0; }
+      .footer { margin-top: 40px; font-size: 11px; color: #9ca3af; text-align: center; border-top: 1px solid #f3f4f6; padding-top: 15px; }
+    `;
+    let html = `<!DOCTYPE html><html><head><title>${activeGarageName} - Settlement History</title><style>${sharedStyles}</style></head><body>
+      <div class="header-container">
+        <div><h1 class="header-title">${activeGarageName}</h1><p class="header-subtitle">Settlement History Report (Selected)</p></div>
+        <div style="text-align: right;"><div style="font-weight: 600; font-size: 14px;">Generated on: ${new Date().toLocaleDateString('en-GB')}</div></div>
+      </div>
+      <div class="summary-box">
+        <div class="summary-item"><span class="summary-item-label">Date Range</span><span class="summary-item-value">${dateRangeStr}</span></div>
+        <div class="summary-item"><span class="summary-item-label">Records Selected</span><span class="summary-item-value">${toPrint.length}</span></div>
+        <div class="summary-item"><span class="summary-item-label">Overall Unsettled Balance</span>
+          <span class="summary-item-value ${garageBalance > 0 ? 'positive' : garageBalance < 0 ? 'negative' : ''}">
+            ${garageBalance === 0 ? 'Settled (₹0)' : garageBalance > 0 ? "You're owed +₹" + garageBalance.toLocaleString('en-IN', { minimumFractionDigits: 2 }) : "You owe ₹" + Math.abs(garageBalance).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+          </span>
+        </div>
+      </div>`;
+    toPrint.forEach(s => {
+      const isPaymentRow = !s.billing && s.settled;
+      const isMechHelpPaying = s.netAmount > 0;
+      const dateStr = new Date(s.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+      html += `<div class="record-card"><div class="record-header"><span class="record-date">${dateStr}</span><span class="record-type">${isPaymentRow ? 'Payment Record' : 'Service Booking'}</span></div><div class="record-body">`;
+      if (isPaymentRow) {
+        const targetGarage = getRowGarageName(s) || activeGarageName;
+        html += `<div style="font-size: 14px;"><strong>${isMechHelpPaying ? 'Payment: MechHelp → Garage' : 'Payment: Garage → MechHelp'}</strong><br/><span style="color: #6b7280; font-size: 13px;">${isMechHelpPaying ? `We paid ${targetGarage}` : `${targetGarage} paid us`}</span></div><div style="margin-top: 15px; font-size: 16px; font-weight: 700; color: ${isMechHelpPaying ? '#dc2626' : '#16a34a'}">Amount: ₹${Math.abs(s.netAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</div>`;
+      } else {
+        const b = s.billing!;
+        const lineItems = b.lineItems || [];
+        const discount = b.discount || 0;
+        const { totalAmount, totalMechhelpEntitled, totalGarageEntitled } = calculateSettlement(lineItems.map(i => ({ name: i.name, amount: i.amount, splitEnabled: i.splitEnabled, mechhelpPct: i.mechhelpPct, garagePct: i.garagePct })), b.paidTo, discount);
+        const rawMechhelp = totalMechhelpEntitled + discount;
+        html += `<div class="info-grid"><div class="info-item"><span>Customer</span><strong>${s.customerName}</strong></div><div class="info-item"><span>Vehicle</span><strong>${s.carBrand} ${s.carModel}${s.numberPlate ? ` (${s.numberPlate})` : ''}</strong></div><div class="info-item"><span>Status</span><strong style="text-transform: capitalize;">${b.status}</strong></div><div class="info-item"><span>Collected By</span><strong style="text-transform: capitalize;">${b.paidTo || 'N/A'}</strong></div></div><table><thead><tr><th>Service/Item</th><th>Split</th><th style="text-align:right;">Gross</th><th style="text-align:right;">MechHelp</th><th style="text-align:right;">Garage</th></tr></thead><tbody>${lineItems.map(item => `<tr><td><strong>${item.name}</strong></td><td>${item.splitEnabled ? `${item.mechhelpPct}% / ${item.garagePct}%` : 'Disabled'}</td><td style="text-align:right;">₹${item.amount.toFixed(2)}</td><td style="text-align:right;">${item.splitEnabled ? `₹${(item.amount * item.mechhelpPct / 100).toFixed(2)}` : '₹0.00'}</td><td style="text-align:right;">₹${(item.splitEnabled ? item.amount * item.garagePct / 100 : item.amount).toFixed(2)}</td></tr>`).join('')}</tbody></table><div class="totals-grid"><div><div class="totals-row"><span>Total Amount:</span><strong>₹${totalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong></div><div class="totals-row" style="color: #4b5563;"><span>MechHelp Entitled (before discount):</span><span>₹${rawMechhelp.toFixed(2)}</span></div>${discount > 0 ? `<div class="totals-row" style="color: #dc2626;"><span>Discount:</span><span>− ₹${discount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div>` : ''}</div><div><div class="totals-row"><span>MechHelp Entitled (after discount):</span><strong style="${totalMechhelpEntitled < 0 ? 'color: #dc2626;' : ''}">₹${totalMechhelpEntitled.toFixed(2)}</strong></div><div class="totals-row" style="color: #4b5563;"><span>Total Garage Entitled:</span><span>₹${totalGarageEntitled.toFixed(2)}</span></div><div class="divider"></div><div class="totals-row bold"><span>Net Settlement Effect:</span><span style="color: ${s.netAmount > 0 ? '#16a34a' : s.netAmount < 0 ? '#dc2626' : '#4b5563'}">${s.netAmount > 0 ? 'Garage owes us' : 'We owe Garage'} ₹${Math.abs(s.netAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</span></div></div></div>`;
+      }
+      html += `</div></div>`;
+    });
+    html += `<div class="footer">Generated automatically by MechHelp CRM — Official Garage Settlement History Document</div></body></html>`;
+    printWindow.document.write(html);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => { printWindow.print(); }, 250);
+  };
+
   const handlePrintAllSettlements = () => {
     if (!activeGarageId || filteredSettlements.length === 0) return;
 
@@ -888,10 +1013,11 @@ export const GarageSettlement: React.FC = () => {
       html += `<div class="record-body">`;
 
       if (isPaymentRow) {
+        const targetGarage = getRowGarageName(s) || activeGarageName;
         html += `
           <div style="font-size: 14px;">
             <strong>${isMechHelpPaying ? 'Payment: MechHelp → Garage' : 'Payment: Garage → MechHelp'}</strong><br/>
-            <span style="color: #6b7280; font-size: 13px;">${isMechHelpPaying ? `We paid ${activeGarageName}` : `${activeGarageName} paid us`}</span>
+            <span style="color: #6b7280; font-size: 13px;">${isMechHelpPaying ? `We paid ${targetGarage}` : `${targetGarage} paid us`}</span>
           </div>
           <div style="margin-top: 15px; font-size: 16px; font-weight: 700; color: ${isMechHelpPaying ? '#dc2626' : '#16a34a'}">
              Amount: ₹${Math.abs(s.netAmount).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
@@ -1204,19 +1330,49 @@ export const GarageSettlement: React.FC = () => {
                 type="button"
                 className="btn btn-secondary"
                 onClick={() => setShowAddCustomerModal(true)}
-                disabled={actionLoading || loadingDetails || isMasterLedger}
-                title={isMasterLedger ? 'Switch to a specific garage to add a customer' : 'Add a walk-in customer directly against this garage'}
+                disabled={actionLoading || loadingDetails}
+                title="Add a walk-in customer directly against a garage"
               >
                 <UserPlus size={16} style={{ marginRight: '0.25rem' }} /> Add Customer
               </button>
               <button
                 type="button"
                 className="btn btn-secondary"
+                onClick={handleSelectAll}
+                disabled={actionLoading || loadingDetails || filteredSettlements.filter(s => s.billing).length === 0}
+                title="Select / deselect all printable records"
+              >
+                {filteredSettlements.filter(s => s.billing).length > 0 && filteredSettlements.filter(s => s.billing).every(s => selectedIds.has(s.id)) ? '☑ Deselect All' : '☐ Select All'}
+              </button>
+              {selectedIds.size > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={handlePrintSelected}
+                  disabled={actionLoading || loadingDetails}
+                  title={`Print ${selectedIds.size} selected record(s)`}
+                >
+                  <Printer size={16} style={{ marginRight: '0.25rem' }} /> Print Selected ({selectedIds.size})
+                </button>
+              )}
+              {selectedIds.size > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => { setSelectedIds(new Set()); lastClickedIdxRef.current = null; }}
+                  title="Clear all selections"
+                >
+                  ✕ Unselect All
+                </button>
+              )}
+              <button
+                type="button"
+                className="btn btn-secondary"
                 onClick={handlePrintAllSettlements}
                 disabled={actionLoading || loadingDetails || filteredSettlements.length === 0}
-                title="Print visible settlement history"
+                title="Print all visible settlement history"
               >
-                <Printer size={16} style={{ marginRight: '0.25rem' }} /> Print
+                <Printer size={16} style={{ marginRight: '0.25rem' }} /> Print All
               </button>
             </div>
           </div>
@@ -1228,6 +1384,15 @@ export const GarageSettlement: React.FC = () => {
               <table className="data-table">
                 <thead>
                   <tr>
+                    <th style={{ width: '36px', textAlign: 'center' }}>
+                      <input
+                        type="checkbox"
+                        checked={filteredSettlements.filter(s => s.billing).length > 0 && filteredSettlements.filter(s => s.billing).every(s => selectedIds.has(s.id))}
+                        onChange={handleSelectAll}
+                        title="Select all / Deselect all"
+                        style={{ cursor: 'pointer', width: '15px', height: '15px' }}
+                      />
+                    </th>
                     <th>Date</th>
                     <th>Customer / Vehicle</th>
                     <th>Total Amount</th>
@@ -1237,24 +1402,39 @@ export const GarageSettlement: React.FC = () => {
                     <th>Details</th>
                   </tr>
                 </thead>
-                <tbody>
+                 <tbody>
                   {filteredSettlements.length === 0 ? (
                     <tr>
-                      <td colSpan={7} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                      <td colSpan={8} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                         {filterDate ? 'No settlement history found for this date.' : 'No settlement history found for this garage.'}
                       </td>
                     </tr>
                   ) : (
-                    filteredSettlements.map((s) => {
+                    filteredSettlements.map((s, index) => {
                       const isPaymentRow = !s.billing && s.settled;
                       const isMechHelpPaying = s.netAmount > 0;
+                      const isSelected = selectedIds.has(s.id);
+                      const rowGarageName = getRowGarageName(s);
                       return (
                         <tr
                           key={s.id}
-                          className={`settlement-row ${s.settled ? 'row-settled' : 'row-unsettled'}`}
+                          className={`settlement-row ${s.settled ? 'row-settled' : 'row-unsettled'}${isSelected ? ' row-selected' : ''}`}
                           onClick={() => !isPaymentRow && setSelectedSettlement(s)}
-                          style={{ cursor: isPaymentRow ? 'default' : 'pointer' }}
+                          style={{ cursor: isPaymentRow ? 'default' : 'pointer', background: isSelected ? 'var(--accent-primary, #3b82f6)18' : undefined }}
                         >
+                          <td
+                            style={{ textAlign: 'center', width: '36px' }}
+                            onClick={e => { e.stopPropagation(); if (!isPaymentRow) handleRowCheckbox(s.id, index, e.shiftKey); }}
+                          >
+                            {!isPaymentRow && (
+                              <input
+                                type="checkbox"
+                                checked={isSelected}
+                                onChange={() => {}}
+                                style={{ cursor: 'pointer', width: '15px', height: '15px', accentColor: 'var(--accent-primary, #3b82f6)' }}
+                              />
+                            )}
+                          </td>
                           <td>{new Date(s.createdAt).toLocaleDateString('en-GB')}</td>
                           <td>
                             {isPaymentRow ? (
@@ -1263,7 +1443,9 @@ export const GarageSettlement: React.FC = () => {
                                   {isMechHelpPaying ? 'Payment: MechHelp → Garage' : 'Payment: Garage → MechHelp'}
                                 </strong>
                                 <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                                  {isMechHelpPaying ? `We paid ${activeGarageName}` : `${activeGarageName} paid us`}
+                                  {isMechHelpPaying
+                                    ? (rowGarageName ? `We paid ${rowGarageName}` : 'We paid garage')
+                                    : (rowGarageName ? `${rowGarageName} paid us` : 'Garage paid us')}
                                 </div>
                               </div>
                             ) : (
@@ -1279,7 +1461,9 @@ export const GarageSettlement: React.FC = () => {
                           <td>
                             {isPaymentRow ? (
                               <span className={`badge ${isMechHelpPaying ? 'badge-red' : 'badge-green'}`}>
-                                {isMechHelpPaying ? 'MechHelp Paid' : 'Garage Paid'}
+                                {isMechHelpPaying
+                                  ? (rowGarageName ? `MechHelp Paid (${rowGarageName})` : 'MechHelp Paid')
+                                  : (rowGarageName ? `Garage Paid (${rowGarageName})` : 'Garage Paid')}
                               </span>
                             ) : (
                               <span className="badge badge-gray" style={{ textTransform: 'capitalize' }}>
@@ -1498,18 +1682,24 @@ export const GarageSettlement: React.FC = () => {
       )}
 
       {/* ── Add Direct Customer Modal ─────────────────────────────────────── */}
-      {showAddCustomerModal && activeGarageId && !isMasterLedger && (
+      {showAddCustomerModal && activeGarageId && (
         <AddDirectCustomerModal
           isOpen={showAddCustomerModal}
           onClose={() => setShowAddCustomerModal(false)}
           onSaved={async () => {
-            const data = await getGarageSettlements(activeGarageId);
-            setSettlements(data.settlements);
-            setGarageBalance(data.balance);
+            if (isMasterLedger) {
+              const data = await getAllSettlements();
+              setSettlements(data.settlements);
+            } else {
+              const data = await getGarageSettlements(activeGarageId);
+              setSettlements(data.settlements);
+              setGarageBalance(data.balance);
+            }
             loadGarages();
           }}
-          garageId={activeGarageId}
-          garageName={activeGarageName}
+          garageId={isMasterLedger ? '' : activeGarageId}
+          garageName={isMasterLedger ? '' : activeGarageName}
+          garages={isMasterLedger ? garages : undefined}
         />
       )}
 

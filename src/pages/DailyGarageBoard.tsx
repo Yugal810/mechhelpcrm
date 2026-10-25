@@ -1,6 +1,8 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Building2,
+  Car,
   Check,
   CheckCircle2,
   ChevronLeft,
@@ -16,7 +18,8 @@ import {
   Type,
   X,
 } from 'lucide-react';
-import { DailyGarageBoardService, SettlementService } from '../utils/dataLayer';
+import { DailyGarageBoardService, SettlementService, toYmd } from '../utils/dataLayer';
+import { useLeadContext } from '../store/LeadContext';
 import type { DailyGarageEntry, DailyGarageEntryStatus } from '../types';
 import './DailyGarageBoard.css';
 
@@ -78,7 +81,7 @@ const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [onCancel]);
 
-  return (
+  return createPortal(
     <div className="dgb-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="dgb-confirm-title">
       <div className="dgb-modal dgb-confirm-modal">
         <div className="dgb-confirm-body">
@@ -109,7 +112,8 @@ const DeleteConfirmModal: React.FC<DeleteConfirmModalProps> = ({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
@@ -125,17 +129,78 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, onStatusChange, onDelete }
   const [menuOpen, setMenuOpen] = useState(false);
   const [showConfirmDelete, setShowConfirmDelete] = useState(false);
   const popoverRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+
+  const calculatePosition = () => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const menuWidth = 205;
+    const menuHeight = 165;
+    const viewportHeight = window.innerHeight;
+    const viewportWidth = window.innerWidth;
+
+    // Determine vertical placement: below if space permits, otherwise above
+    const spaceBelow = viewportHeight - rect.bottom;
+    const showAbove = spaceBelow < menuHeight + 10 && rect.top > menuHeight + 10;
+    const top = showAbove ? rect.top - menuHeight - 4 : rect.bottom + 4;
+
+    // Align right side of menu to right side of trigger button
+    let left = rect.right - menuWidth;
+    if (left < 10) left = 10;
+    if (left + menuWidth > viewportWidth - 10) {
+      left = viewportWidth - menuWidth - 10;
+    }
+
+    setMenuPos({ top, left });
+  };
+
+  const toggleMenu = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!menuOpen) {
+      calculatePosition();
+      setMenuOpen(true);
+    } else {
+      setMenuOpen(false);
+    }
+  };
 
   // Close menu when clicking outside
   useEffect(() => {
     if (!menuOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (popoverRef.current && !popoverRef.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      if (
+        popoverRef.current && !popoverRef.current.contains(target) &&
+        triggerRef.current && !triggerRef.current.contains(target)
+      ) {
         setMenuOpen(false);
       }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [menuOpen]);
+
+  // Close menu on scroll or resize so it doesn't detach
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleScrollOrResize = () => setMenuOpen(false);
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+    return () => {
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+    };
+  }, [menuOpen]);
+
+  // Handle ESC key
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMenuOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, [menuOpen]);
 
   const handleStatusSelect = (status: DailyGarageEntryStatus) => {
@@ -150,16 +215,17 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, onStatusChange, onDelete }
 
   return (
     <>
-      <div className={`dgb-inline-card status-${entry.status}`} ref={popoverRef}>
+      <div className={`dgb-inline-card status-${entry.status}`}>
         {/* Top row: Primary Focal Point (Car Model) + Three-Dot Trigger */}
         <div className="dgb-card-top-row">
           <span className="dgb-card-car-model" title={entry.carName}>
             {entry.carName}
           </span>
           <button
+            ref={triggerRef}
             id={`dgb-menu-trigger-${entry.id}`}
             className="dgb-card-menu-trigger"
-            onClick={() => setMenuOpen(prev => !prev)}
+            onClick={toggleMenu}
             title="Actions menu"
             aria-label={`Options for ${entry.carName}`}
           >
@@ -185,6 +251,11 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, onStatusChange, onDelete }
           )}
 
           {/* Dominant Status Badge Pill */}
+          {entry.status === 'picked_up' && (
+            <span className="dgb-card-status-pill pill-picked-up">
+              <Car size={9} /> PICKED UP
+            </span>
+          )}
           {entry.status === 'arrived' && (
             <span className="dgb-card-status-pill pill-arrived">
               <Check size={9} strokeWidth={3} /> ARRIVED
@@ -202,15 +273,31 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, onStatusChange, onDelete }
           )}
         </div>
 
-        {/* Three-Dot Popover Menu */}
-        {menuOpen && (
-          <div className="dgb-card-menu-popover" role="menu">
+        {/* Three-Dot Popover Menu rendered via Portal with computed coordinates */}
+        {menuOpen && menuPos && createPortal(
+          <div
+            ref={popoverRef}
+            className="dgb-card-menu-popover"
+            role="menu"
+            style={{
+              top: `${menuPos.top}px`,
+              left: `${menuPos.left}px`,
+            }}
+          >
+            <button
+              id={`dgb-opt-picked-up-${entry.id}`}
+              className="dgb-menu-item item-picked-up"
+              onClick={() => handleStatusSelect('picked_up')}
+            >
+              <Car size={14} /> Picked Up
+            </button>
+
             <button
               id={`dgb-opt-arrived-${entry.id}`}
               className="dgb-menu-item item-arrived"
               onClick={() => handleStatusSelect('arrived')}
             >
-              <Check size={14} strokeWidth={2.5} /> Mark Arrived (Green)
+              <Check size={14} strokeWidth={2.5} /> Mark Arrived
             </button>
 
             <button
@@ -218,7 +305,7 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, onStatusChange, onDelete }
               className="dgb-menu-item item-done"
               onClick={() => handleStatusSelect('done')}
             >
-              <CheckCircle2 size={14} strokeWidth={2.5} /> Mark Serviced/Done (Blue)
+              <CheckCircle2 size={14} strokeWidth={2.5} /> Mark Serviced/Done
             </button>
 
             <button
@@ -238,7 +325,8 @@ const EntryCard: React.FC<EntryCardProps> = ({ entry, onStatusChange, onDelete }
             >
               <Trash2 size={14} /> Delete Entry
             </button>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
 
@@ -666,6 +754,7 @@ const GarageRow: React.FC<GarageRowProps> = ({
 // ─── Main Page ───────────────────────────────────────────────────────────────
 
 export const DailyGarageBoard: React.FC = () => {
+  const { leads } = useLeadContext();
   const [selectedDate, setSelectedDate] = useState(todayString());
   const [noticeMsg, setNoticeMsg] = useState<string | null>(null);
   const [garages, setGarages] = useState<{ id: string; name: string }[]>([]);
@@ -678,6 +767,34 @@ export const DailyGarageBoard: React.FC = () => {
   const minDate = addDays(today, -7);
   const maxDate = addDays(today, 7);
   const isToday = selectedDate === today;
+
+  const [deletedLeadIds, setDeletedLeadIds] = useState<Set<string>>(new Set());
+
+  // Dynamically map Booked leads from CRM matching selectedDate
+  const bookedLeadEntries: DailyGarageEntry[] = useMemo(() => {
+    return leads
+      .filter(l => l.leadType === 'Booked' && l.garageAssigned && !deletedLeadIds.has(l.id))
+      .filter(l => toYmd(l.bookingDateTime || l.nextFollowUpDate) === selectedDate)
+      .map(l => ({
+        id: `lead-dgb-${l.id}`,
+        garageId: l.garageAssigned || '',
+        customerName: l.customerName || 'Customer',
+        carName: `${l.carBrand || ''} ${l.carModel || ''}`.trim() || 'Vehicle',
+        numberPlate: l.numberPlate,
+        notes: l.notes || '',
+        status: 'pending' as DailyGarageEntryStatus,
+        source: 'salesiq' as const,
+        leadId: l.id,
+        createdDate: selectedDate,
+        createdAt: l.createdDate || new Date().toISOString()
+      }));
+  }, [leads, selectedDate, deletedLeadIds]);
+
+  const combinedEntries = useMemo(() => {
+    const existingLeadIds = new Set(entries.map(e => e.leadId).filter(Boolean));
+    const newFromLeads = bookedLeadEntries.filter(ble => !existingLeadIds.has(ble.leadId));
+    return [...entries, ...newFromLeads];
+  }, [entries, bookedLeadEntries]);
 
   // Load garages once on mount
   useEffect(() => {
@@ -708,22 +825,50 @@ export const DailyGarageBoard: React.FC = () => {
   // ─── Handlers ───────────────────────────────────────────────────────────
 
   const handleStatusChange = async (id: string, status: DailyGarageEntryStatus) => {
-    // Optimistic update
-    setEntries(prev => prev.map(e => e.id === id ? { ...e, status } : e));
+    const isVirtual = id.startsWith('lead-dgb-');
+    const realLeadId = isVirtual ? id.replace('lead-dgb-', '') : (entries.find(e => e.id === id)?.leadId || null);
+    const target = combinedEntries.find(e => e.id === id);
+
+    // Immediate 0ms optimistic update
+    setEntries(prev => {
+      const matchIdx = prev.findIndex(e => e.id === id || (realLeadId && e.leadId === realLeadId));
+      if (matchIdx !== -1) {
+        const next = [...prev];
+        next[matchIdx] = { ...next[matchIdx], status };
+        return next;
+      } else if (target) {
+        return [...prev, { ...target, status }];
+      }
+      return prev;
+    });
+
     try {
-      await DailyGarageBoardService.updateEntry(id, { status });
+      const saved = await DailyGarageBoardService.updateEntry(id, { status });
+      // Update with the saved DB record (real UUID)
+      setEntries(prev => {
+        const filtered = prev.filter(e => e.id !== id && (saved.leadId ? e.leadId !== saved.leadId : true));
+        return [...filtered, saved];
+      });
     } catch (err: any) {
+      console.error('Failed to update status:', err);
       alert(`Failed to update status: ${err?.message}`);
-      // Revert on error
       loadEntries(selectedDate);
     }
   };
 
   const handleDelete = async (id: string) => {
-    setEntries(prev => prev.filter(e => e.id !== id));
+    const isVirtual = id.startsWith('lead-dgb-');
+    const realLeadId = isVirtual ? id.replace('lead-dgb-', '') : (entries.find(e => e.id === id)?.leadId || null);
+
+    if (realLeadId) {
+      setDeletedLeadIds(prev => new Set(prev).add(realLeadId));
+    }
+    setEntries(prev => prev.filter(e => e.id !== id && (realLeadId ? e.leadId !== realLeadId : true)));
+
     try {
       await DailyGarageBoardService.deleteEntry(id);
     } catch (err: any) {
+      console.error('Failed to delete entry:', err);
       alert(`Failed to delete entry: ${err?.message}`);
       loadEntries(selectedDate);
     }
@@ -883,7 +1028,7 @@ export const DailyGarageBoard: React.FC = () => {
               key={garage.id}
               garageId={garage.id}
               garageName={garage.name}
-              entries={entries}
+              entries={combinedEntries}
               date={selectedDate}
               onStatusChange={handleStatusChange}
               onDelete={handleDelete}

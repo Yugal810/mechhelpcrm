@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useLeadContext } from '../store/LeadContext';
 import { isToday, isBefore, startOfToday, differenceInDays } from 'date-fns';
-import { AddLeadModal } from '../components/AddLeadModal';
 import { CallOutcomeModal } from '../components/CallOutcomeModal';
+import { FullPageLeadEdit } from '../components/FullPageLeadEdit';
 import { Plus, Phone, Edit } from 'lucide-react';
 import { DeleteConfirmAction } from '../components/DeleteConfirmAction';
 import { ServiceTypeBadge } from '../components/ServiceTypeBadge';
@@ -11,8 +11,9 @@ import './Dashboard.css';
 
 export const Dashboard: React.FC = () => {
   const { leads, deleteLead } = useLeadContext();
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isAddingNewLead, setIsAddingNewLead] = useState(false);
   const [deleteErrorId, setDeleteErrorId] = useState<string | null>(null);
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
 
   const today = startOfToday();
 
@@ -20,7 +21,7 @@ export const Dashboard: React.FC = () => {
   const activeLeads = leads.filter(l => !['Booked', 'Completed', 'Lost'].includes(l.leadType));
 
   const overdue = activeLeads.filter(l => isBefore(new Date(l.nextFollowUpDate), today))
-    .sort((a, b) => new Date(a.nextFollowUpDate).getTime() - new Date(b.nextFollowUpDate).getTime());
+    .sort((a, b) => new Date(a.nextFollowUpDate).getTime() - new Date(a.nextFollowUpDate).getTime());
     
   const dueToday = activeLeads.filter(l => isToday(new Date(l.nextFollowUpDate)));
 
@@ -34,15 +35,13 @@ export const Dashboard: React.FC = () => {
   const priorityQueue = [...overdue, ...dueToday, ...vipTouchBase];
 
   const [selectedCallLead, setSelectedCallLead] = useState<Lead | null>(null);
-  const [selectedEditLead, setSelectedEditLead] = useState<Lead | null>(null);
-  const [bookingLead, setBookingLead] = useState<Lead | null>(null);
 
   const handleMarkContacted = (lead: Lead) => {
     setSelectedCallLead(lead);
   };
 
   const handleEdit = (lead: Lead) => {
-    setSelectedEditLead(lead);
+    setEditingLead(lead);
   };
 
   const handleDelete = async (leadId: string) => {
@@ -54,11 +53,29 @@ export const Dashboard: React.FC = () => {
     }
   };
 
+  if (isAddingNewLead) {
+    return (
+      <FullPageLeadEdit
+        lead={null}
+        onClose={() => setIsAddingNewLead(false)}
+      />
+    );
+  }
+
+  if (editingLead) {
+    return (
+      <FullPageLeadEdit
+        lead={editingLead}
+        onClose={() => setEditingLead(null)}
+      />
+    );
+  }
+
   return (
     <div className="dashboard animate-fade-in">
       <div className="dashboard-header">
         <h1>Dashboard / Call Queue</h1>
-        <button className="btn btn-primary" onClick={() => setIsModalOpen(true)}>
+        <button className="btn btn-primary" onClick={() => setIsAddingNewLead(true)}>
           <Plus size={18} /> New Lead
         </button>
       </div>
@@ -79,7 +96,13 @@ export const Dashboard: React.FC = () => {
                 <div key={lead.id} className={`queue-card surface-panel ${isOverdue ? 'border-danger' : ''}`}>
                   <div className="queue-card-left">
                     <div className="queue-card-header">
-                      <h3>{lead.customerName || 'Unknown'}</h3>
+                      <h3
+                        style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                        onClick={() => handleEdit(lead)}
+                        title="Click to edit lead"
+                      >
+                        {lead.customerName || 'Unknown'}
+                      </h3>
                       <span className={`badge ${lead.isVip ? 'badge-vip' : 'badge-gray'}`}>
                         {lead.isVip ? 'VIP' : lead.leadSource}
                       </span>
@@ -124,17 +147,13 @@ export const Dashboard: React.FC = () => {
         )}
       </div>
 
-      <AddLeadModal 
-        isOpen={isModalOpen || !!bookingLead || !!selectedEditLead} 
-        onClose={() => { setIsModalOpen(false); setBookingLead(null); setSelectedEditLead(null); }} 
-        initialData={selectedEditLead || bookingLead || undefined}
-      />
+
       {selectedCallLead && (
         <CallOutcomeModal
           isOpen={!!selectedCallLead}
           onClose={() => setSelectedCallLead(null)}
           lead={selectedCallLead}
-          onBooked={(l) => setBookingLead(l)}
+          onBooked={() => {}}
         />
       )}
     </div>

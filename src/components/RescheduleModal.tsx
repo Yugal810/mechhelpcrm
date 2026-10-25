@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import type { Lead, RescheduleHistoryEntry } from '../types';
-import { X, Calendar, MapPin, Car, User, Phone } from 'lucide-react';
+import { X, Calendar, Clock, MapPin, Car, User, Phone, CalendarClock, AlertCircle } from 'lucide-react';
 import { useLeadContext } from '../store/LeadContext';
+import './RescheduleModal.css';
 
 interface RescheduleModalProps {
   isOpen: boolean;
@@ -21,9 +23,19 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({ isOpen, onClos
   const [error, setError] = useState('');
   const [garageList, setGarageList] = useState<{ id: string; name: string }[]>([]);
 
-  const currentDateTime = lead?.bookingDateTime ? new Date(lead.bookingDateTime) : null;
-  const currentDate = currentDateTime ? currentDateTime.toISOString().split('T')[0] : '';
-  const currentTime = currentDateTime ? currentDateTime.toTimeString().slice(0, 5) : '';
+  // Parse current booking date and time
+  const currentDateTime = lead?.bookingDateTime ? new Date(lead.bookingDateTime.includes('T') ? lead.bookingDateTime : `${lead.bookingDateTime}T00:00:00`) : null;
+  const currentDate = currentDateTime && !isNaN(currentDateTime.getTime()) ? currentDateTime.toISOString().split('T')[0] : '';
+  const hasSpecificTime = lead?.bookingDateTime?.includes('T') && lead.bookingDateTime.split('T')[1]?.length >= 4;
+  const currentTime = currentDateTime && !isNaN(currentDateTime.getTime()) && hasSpecificTime ? currentDateTime.toTimeString().slice(0, 5) : '';
+
+  const formattedCurrentDate = currentDateTime && !isNaN(currentDateTime.getTime())
+    ? currentDateTime.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    : 'Not Scheduled';
+  
+  const formattedCurrentTime = currentTime
+    ? currentDateTime?.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })
+    : '';
 
   useEffect(() => {
     if (isOpen && lead) {
@@ -37,7 +49,20 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({ isOpen, onClos
         .then(list => setGarageList(list))
         .catch(err => console.error('Failed to load garages in RescheduleModal:', err));
     }
-  }, [isOpen, lead]);
+  }, [isOpen, lead, getGarageList]);
+
+  // Handle ESC key to close
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen && !isSubmitting) {
+        onClose();
+      }
+    };
+    if (isOpen) {
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, isSubmitting, onClose]);
 
   if (!isOpen || !lead) return null;
 
@@ -46,13 +71,18 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({ isOpen, onClos
     setError('');
 
     if (!newDate || !newTime || !reason) {
-      setError('Please fill out all required fields.');
+      setError('Please provide a new date, time, and select a reason for rescheduling.');
       return;
     }
 
     const selectedDate = new Date(`${newDate}T${newTime}`);
+    if (isNaN(selectedDate.getTime())) {
+      setError('Invalid date or time format selected.');
+      return;
+    }
+
     if (selectedDate < new Date()) {
-      setError('New booking date and time cannot be in the past.');
+      setError('The new booking date and time cannot be in the past.');
       return;
     }
 
@@ -60,14 +90,14 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({ isOpen, onClos
 
     try {
       const historyEntry: RescheduleHistoryEntry = {
-        previousDate: currentDate,
-        previousTime: currentTime,
-        previousGarage: lead.garageAssigned,
+        previousDate: currentDate || new Date().toISOString().split('T')[0],
+        previousTime: currentTime || '10:00',
+        previousGarage: lead.garageAssigned || 'Not Assigned',
         newDate: newDate,
         newTime: newTime,
-        newGarage: newGarage,
+        newGarage: newGarage || lead.garageAssigned,
         reason,
-        remarks,
+        remarks: remarks.trim(),
         rescheduledBy: 'Chetan',
         rescheduledOn: new Date().toISOString()
       };
@@ -75,140 +105,210 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({ isOpen, onClos
       const updatedLead: Lead = {
         ...lead,
         bookingDateTime: selectedDate.toISOString(),
-        garageAssigned: newGarage,
+        garageAssigned: newGarage || lead.garageAssigned,
         bookingHistory: [...(lead.bookingHistory || []), historyEntry]
       };
 
       await onSave(updatedLead);
       onClose();
-    } catch (err) {
-      setError('Failed to reschedule. Please try again.');
+    } catch (err: any) {
+      console.error('Failed to save reschedule:', err);
+      setError(err?.message || 'Failed to reschedule booking. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  return (
-    <div className="modal-overlay">
-      <div className="modal-content surface-panel animate-fade-in" style={{ maxWidth: '600px' }}>
-        <div className="modal-header">
-          <h2>Reschedule Booking</h2>
-          <button onClick={onClose} className="btn-icon"><X size={20} /></button>
+  const todayStr = new Date().toISOString().split('T')[0];
+
+  return createPortal(
+    <div 
+      className="reschedule-modal-overlay"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !isSubmitting) {
+          onClose();
+        }
+      }}
+    >
+      <div className="reschedule-modal-container surface-panel">
+        {/* Header */}
+        <div className="reschedule-modal-header">
+          <div className="reschedule-header-title">
+            <div className="reschedule-header-icon">
+              <CalendarClock size={20} />
+            </div>
+            <div className="reschedule-header-text">
+              <h2>Reschedule Booking</h2>
+              <p>Change appointment date, time, or assigned garage</p>
+            </div>
+          </div>
+          <button 
+            type="button" 
+            onClick={onClose} 
+            className="reschedule-close-btn"
+            disabled={isSubmitting}
+            title="Close"
+          >
+            <X size={18} />
+          </button>
         </div>
 
-        <div className="modal-body">
-          {error && <div style={{ background: 'var(--danger-bg)', color: 'var(--danger)', padding: '0.75rem', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem', fontSize: '0.875rem' }}>{error}</div>}
-          
-          <div style={{ background: 'var(--bg-tertiary)', padding: '1rem', borderRadius: 'var(--radius-md)', marginBottom: '1.5rem', border: '1px solid var(--border-light)' }}>
-            <h3 style={{ fontSize: '0.75rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '0.75rem' }}>Current Details</h3>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
-                <User size={14} style={{ color: 'var(--info)' }} />
-                <span>{lead.customerName}</span>
+        {/* Modal Form */}
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+          <div className="reschedule-modal-body">
+            {error && (
+              <div className="reschedule-error-banner">
+                <AlertCircle size={18} style={{ flexShrink: 0 }} />
+                <span>{error}</span>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
-                <Phone size={14} style={{ color: 'var(--info)' }} />
-                <span>{lead.identifier}</span>
+            )}
+
+            {/* Current Details Card */}
+            <div className="reschedule-current-card">
+              <span className="reschedule-card-heading">Current Booking Details</span>
+              <div className="reschedule-info-grid">
+                <div className="reschedule-info-item" title={lead.customerName}>
+                  <User size={15} />
+                  <span>Customer: <strong>{lead.customerName}</strong></span>
+                </div>
+                <div className="reschedule-info-item">
+                  <Phone size={15} />
+                  <span>Phone: <strong>{lead.identifier}</strong></span>
+                </div>
+                <div className="reschedule-info-item" title={`${lead.carBrand} ${lead.carModel}`}>
+                  <Car size={15} />
+                  <span>Vehicle: <strong>{lead.carBrand} {lead.carModel}</strong></span>
+                </div>
+                <div className="reschedule-info-item" title={lead.garageAssigned || 'No Garage'}>
+                  <MapPin size={15} />
+                  <span>Garage: <strong>{lead.garageAssigned || 'Not Assigned'}</strong></span>
+                </div>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
-                <Car size={14} style={{ color: 'var(--info)' }} />
-                <span>{lead.carBrand} {lead.carModel}</span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem' }}>
-                <MapPin size={14} style={{ color: 'var(--info)' }} />
-                <span>{lead.garageAssigned || 'No Garage'}</span>
-              </div>
-              <div style={{ gridColumn: 'span 2', marginTop: '0.5rem', padding: '0.5rem', background: 'var(--warning-bg)', borderRadius: 'var(--radius-sm)', border: '1px solid rgba(245, 158, 11, 0.2)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <Calendar size={14} style={{ color: 'var(--warning)' }} />
-                <span style={{ fontSize: '0.875rem', fontWeight: 600, color: 'var(--warning)' }}>
-                  Current: {currentDate ? new Date(currentDate.includes('T') ? currentDate : `${currentDate}T00:00:00`).toLocaleDateString('en-GB') : 'N/A'}
+
+              <div className="reschedule-current-badge">
+                <Calendar size={16} />
+                <span>
+                  Current: {formattedCurrentDate} {formattedCurrentTime ? `at ${formattedCurrentTime}` : ''}
                 </span>
+              </div>
+            </div>
+
+            {/* Input Controls */}
+            <div className="reschedule-form">
+              <div className="reschedule-form-row">
+                <div className="reschedule-field">
+                  <label>
+                    <Calendar size={14} style={{ color: 'var(--text-muted)' }} />
+                    New Date *
+                  </label>
+                  <input
+                    type="date"
+                    className="form-input"
+                    value={newDate}
+                    onChange={(e) => setNewDate(e.target.value)}
+                    min={todayStr}
+                    required
+                    disabled={isSubmitting}
+                  />
+                </div>
+
+                <div className="reschedule-field">
+                  <label>
+                    <Clock size={14} style={{ color: 'var(--text-muted)' }} />
+                    New Time *
+                  </label>
+                  <input
+                    type="time"
+                    className="form-input"
+                    value={newTime}
+                    onChange={(e) => setNewTime(e.target.value)}
+                    required
+                    disabled={isSubmitting}
+                  />
+                </div>
+              </div>
+
+              <div className="reschedule-field">
+                <label>
+                  <MapPin size={14} style={{ color: 'var(--text-muted)' }} />
+                  Reassign Garage (Optional)
+                </label>
+                <select 
+                  className="form-select"
+                  value={newGarage}
+                  onChange={(e) => setNewGarage(e.target.value)}
+                  disabled={isSubmitting}
+                >
+                  <option value="">Keep currently assigned garage...</option>
+                  {newGarage && !garageList.some(g => g.name === newGarage) && (
+                    <option value={newGarage}>{newGarage} (Currently Assigned)</option>
+                  )}
+                  {garageList.map(g => (
+                    <option key={g.id} value={g.name}>{g.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="reschedule-field">
+                <label>
+                  Reason for Reschedule *
+                </label>
+                <select 
+                  className="form-select"
+                  value={reason}
+                  onChange={(e) => setReason(e.target.value)}
+                  required
+                  disabled={isSubmitting}
+                >
+                  <option value="">Select a reason...</option>
+                  <option value="Customer Request">Customer Request</option>
+                  <option value="Garage Busy / Fully Booked">Garage Busy / Fully Booked</option>
+                  <option value="Parts Unavailable">Parts Unavailable</option>
+                  <option value="Executive / Mechanic Unavailable">Executive / Mechanic Unavailable</option>
+                  <option value="Customer Unreachable">Customer Unreachable</option>
+                  <option value="Vehicle Not Available">Vehicle Not Available</option>
+                  <option value="Weather / Emergency">Weather / Emergency</option>
+                  <option value="Other">Other</option>
+                </select>
+              </div>
+
+              <div className="reschedule-field">
+                <label>Remarks / Notes</label>
+                <textarea 
+                  className="form-textarea"
+                  rows={2}
+                  value={remarks}
+                  onChange={(e) => setRemarks(e.target.value)}
+                  placeholder="Additional context or customer request details..."
+                  disabled={isSubmitting}
+                />
               </div>
             </div>
           </div>
 
-          <form onSubmit={handleSubmit}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-              <div className="form-group">
-                <label className="form-label">New Date *</label>
-                <input
-                  type="date"
-                  className="form-input"
-                  value={newDate}
-                  onChange={(e) => setNewDate(e.target.value)}
-                  min={new Date().toISOString().split('T')[0]}
-                  required
-                />
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">New Time *</label>
-                <input
-                  type="time"
-                  className="form-input"
-                  value={newTime}
-                  onChange={(e) => setNewTime(e.target.value)}
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Update Garage (Optional)</label>
-              <select 
-                className="form-select"
-                value={newGarage}
-                onChange={(e) => setNewGarage(e.target.value)}
-              >
-                <option value="">Keep current garage...</option>
-                {newGarage && !garageList.some(g => g.name === newGarage) && (
-                  <option value={newGarage}>{newGarage} (Archived)</option>
-                )}
-                {garageList.map(g => (
-                  <option key={g.id} value={g.name}>{g.name}</option>
-                ))}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Reason for Reschedule *</label>
-              <select 
-                className="form-select"
-                value={reason}
-                onChange={(e) => setReason(e.target.value)}
-                required
-              >
-                <option value="">Select a reason...</option>
-                <option value="Customer Request">Customer Request</option>
-                <option value="Garage Busy">Garage Busy</option>
-                <option value="Parts Unavailable">Parts Unavailable</option>
-                <option value="Executive Unavailable">Executive Unavailable</option>
-                <option value="Other">Other</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label className="form-label">Remarks</label>
-              <textarea 
-                className="form-textarea"
-                rows={2}
-                value={remarks}
-                onChange={(e) => setRemarks(e.target.value)}
-                placeholder="Additional context..."
-              />
-            </div>
-
-            <div className="modal-footer" style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border-light)' }}>
-              <button type="button" className="btn btn-secondary" onClick={onClose} disabled={isSubmitting}>
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-primary" disabled={isSubmitting}>
-                {isSubmitting ? 'Saving...' : 'Save & Reschedule'}
-              </button>
-            </div>
-          </form>
-        </div>
+          {/* Footer */}
+          <div className="reschedule-modal-footer">
+            <button 
+              type="button" 
+              className="btn btn-secondary" 
+              onClick={onClose} 
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button 
+              type="submit" 
+              className="btn btn-primary" 
+              disabled={isSubmitting}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+            >
+              <CalendarClock size={16} />
+              {isSubmitting ? 'Rescheduling...' : 'Save & Reschedule'}
+            </button>
+          </div>
+        </form>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };

@@ -1,0 +1,330 @@
+.lead-edit-panel-container {
+  background: var(--paper, #ffffff);
+  border-top: 1px solid var(--line, #e5e5e5);
+  padding: 0.75rem 1rem 1.25rem;
+  margin-top: 0;
+  box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.04);
+}
+
+.lead-edit-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.65rem;
+  padding-bottom: 0.4rem;
+  border-bottom: 1px solid var(--line, #e5e5e5);
+  flex-wrap: wrap;
+}
+
+.lead-edit-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.lead-avatar-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--ink, #0a0a0a);
+  color: var(--paper, #ffffff);
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+}
+
+.lead-panel-title {
+  margin: 0;
+  font-family: var(--font-brand, sans-serif);
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: var(--ink, #0a0a0a);
+}
+
+.lead-panel-subtitle {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--muted, #6b6b6b);
+  margin-top: 0.15rem;
+}
+
+.lead-selector-wrap {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.lead-select-label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--muted, #6b6b6b);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+}
+
+.lead-select-dropdown {
+  background: var(--mist, #f3f3f3);
+  border: 1.5px solid var(--line, #e5e5e5);
+  border-radius: 10px;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink, #0a0a0a);
+  outline: none;
+  cursor: pointer;
+  max-width: 380px;
+  transition: border-color 0.2s ease;
+}
+
+.lead-select-dropdown:focus {
+  border-color: var(--ink, #0a0a0a);
+  background: #ffffff;
+}
+
+.lead-edit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+}
+
+@media (max-width: 1024px) {
+  .lead-edit-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.lead-edit-card {
+  background: var(--mist, #f8f9fa);
+  border: 1px solid var(--line, #e5e5e5);
+  border-radius: 14px;
+  padding: 0.75rem 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.btn-reset-filters {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--paper, #ffffff);
+  border: 1px solid var(--line, #cbd5e1);
+  color: #475569;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 0.25rem;
+}
+
+.btn-reset-filters:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+  border-color: #94a3b8;
+}
+
+.card-subheading {
+  margin: 0 0 0.25rem 0;
+  font-size: 0.88rem;
+  font-weight: 800;
+  color: var(--ink, #0a0a0a);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+.lead-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.lead-field-group label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--muted, #6b6b6b);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.lead-input,
+.lead-select,
+.lead-textarea {
+  width: 100%;
+  background: #ffffff;
+  border: 1.5px solid var(--line, #e5e5e5);
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem;
+  font-size: 0.83rem;
+  font-weight: 600;
+  color: var(--ink, #0a0a0a);
+  outline: none;
+  font-family: inherit;
+  transition: border-color 0.2s ease;
+}
+
+.lead-input:focus,
+.lead-select:focus,
+.lead-textarea:focus {
+  border-color: var(--ink, #0a0a0a);
+}
+
+.lead-field-row {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.service-pills {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.service-pill {
+  appearance: none;
+  border: 1px solid var(--line, #e5e5e5);
+  background: #ffffff;
+  color: var(--muted, #6b6b6b);
+  font-size: 0.8rem;
+  font-weight: 700;
+  padding: 0.35rem 0.75rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.service-pill.active-teal {
+  background: #d1fae5;
+  color: #047857;
+  border-color: #6ee7b7;
+}
+
+.service-pill.active-vip {
+  background: #ede9fe;
+  color: #6d28d9;
+  border-color: #c4b5fd;
+}
+
+.lead-flags-row {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.25rem;
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: var(--ink, #0a0a0a);
+  cursor: pointer;
+}
+
+.slot-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.slot-btn {
+  appearance: none;
+  border: 1px solid var(--line, #e5e5e5);
+  background: #ffffff;
+  color: var(--muted, #6b6b6b);
+  font-size: 0.78rem;
+  font-weight: 700;
+  padding: 0.3rem 0.75rem;
+  border-radius: 20px;
+  cursor: pointer;
+}
+
+.slot-btn.active {
+  background: var(--ink, #0a0a0a);
+  color: #ffffff;
+  border-color: var(--ink, #0a0a0a);
+}
+
+.booking-subcard {
+  background: #ffffff;
+  border: 1px dashed var(--line, #e5e5e5);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.booking-subcard h5 {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: var(--go, #06c167);
+}
+
+.lead-edit-footer {
+  margin-top: 1.25rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 1rem;
+}
+
+.save-status-msg {
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.save-status-msg.success {
+  color: #059669;
+}
+
+.save-status-msg.error {
+  color: #dc2626;
+}
+
+.btn-save-lead {
+  appearance: none;
+  border: 0;
+  background: var(--ink, #0a0a0a);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  padding: 0.65rem 1.4rem;
+  border-radius: 12px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.55rem;
+  transition: transform 0.15s ease, background 0.2s ease;
+}
+
+.btn-save-lead:hover {
+  background: #1f1f1f;
+  transform: translateY(-1px);
+}
+
+.lead-edit-empty {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--muted, #6b6b6b);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.lead-edit-empty p {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+}

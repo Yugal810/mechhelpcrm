@@ -28,6 +28,8 @@ interface LeadContextType {
   settleGarage: (garageId: string) => Promise<any>;
   isLoading: boolean;
   isMigrating: boolean;
+  isEditingLead: boolean;
+  setIsEditingLead: (val: boolean) => void;
 }
 
 const LeadContext = createContext<LeadContextType | undefined>(undefined);
@@ -39,6 +41,7 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [sujalList, setSujalList] = useState<SujalCallListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isMigrating, setIsMigrating] = useState(false);
+  const [isEditingLead, setIsEditingLead] = useState(false);
 
   const fetchAllData = useCallback(async () => {
     try {
@@ -104,11 +107,14 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const updateLead = async (updatedLead: Lead) => {
+    // 1. Optimistically update local state immediately so UI updates with 0ms delay
+    setLeads(prev => prev.map(l => (l.id === updatedLead.id ? updatedLead : l)));
     try {
       const savedLead = await LeadService.updateLead(updatedLead);
       setLeads(prev => prev.map(l => (l.id === savedLead.id ? savedLead : l)));
     } catch (error) {
       console.error('Error updating lead:', error);
+      fetchAllData();
       throw error;
     }
   };
@@ -220,7 +226,7 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <LeadContext.Provider value={{ leads, sujalList, addLead, updateLead, deleteLead, addSujalItem, updateSujalItem, deleteSujalItem, finalizeBilling, finalizeDirectBilling, getGarageList, addGarage, removeGarage, recordPayment, getGaragesWithBalances, getGarageSettlements, getAllSettlements, getHistorySettlements, markFinalSettlement, deleteSettlement, updateSettlementBilling, settleGarage, isLoading, isMigrating }}>
+    <LeadContext.Provider value={{ leads, sujalList, addLead, updateLead, deleteLead, addSujalItem, updateSujalItem, deleteSujalItem, finalizeBilling, finalizeDirectBilling, getGarageList, addGarage, removeGarage, recordPayment, getGaragesWithBalances, getGarageSettlements, getAllSettlements, getHistorySettlements, markFinalSettlement, deleteSettlement, updateSettlementBilling, settleGarage, isLoading, isMigrating, isEditingLead, setIsEditingLead }}>
       {children}
     </LeadContext.Provider>
   );

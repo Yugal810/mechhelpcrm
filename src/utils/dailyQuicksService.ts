@@ -100,25 +100,34 @@ export const DailyQuicksService = {
   /** Load stored summary or build + persist for today if missing. */
   async getOrCreateTodaySummary(leads: Lead[]): Promise<StoredDailySummary> {
     const today = toISTDateString();
-    const existing = await this.getSummaryByDate(today);
-    if (existing) return existing;
-
     const summary = buildDailyQuicksSummary(leads);
-    return this.saveSummary(summary);
+    return {
+      id: 'today-live',
+      date: today,
+      summary,
+      generatedAt: new Date().toISOString(),
+    };
   },
 
   async getSummaryForDate(
     date: string,
     leads: Lead[]
   ): Promise<StoredDailySummary | null> {
-    const stored = await this.getSummaryByDate(date);
-    if (stored) return stored;
-
     const today = toISTDateString();
+
+    // For today's date, ALWAYS calculate live real-time summary from current leads
     if (date === today) {
       const summary = buildDailyQuicksSummary(leads);
-      return this.saveSummary(summary);
+      return {
+        id: 'today-live',
+        date: today,
+        summary,
+        generatedAt: new Date().toISOString(),
+      };
     }
+
+    const stored = await this.getSummaryByDate(date);
+    if (stored) return stored;
 
     return null;
   },

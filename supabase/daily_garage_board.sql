@@ -19,7 +19,7 @@ UPDATE daily_garage_board_entries SET status = 'done' WHERE status = 'converted'
 
 -- Add updated check constraints
 ALTER TABLE daily_garage_board_entries ADD CONSTRAINT daily_garage_board_entries_status_check 
-  CHECK (status IN ('pending', 'arrived', 'done'));
+  CHECK (status IN ('pending', 'picked_up', 'arrived', 'done'));
 
 ALTER TABLE daily_garage_board_entries ADD CONSTRAINT daily_garage_board_entries_source_check 
   CHECK (source IN ('salesiq', 'custom'));

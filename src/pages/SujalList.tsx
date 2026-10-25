@@ -4,6 +4,7 @@ import { useLeadContext } from '../store/LeadContext';
 import type { Lead, SujalCallListItem, SujalStatus } from '../types';
 import { AddLeadModal } from '../components/AddLeadModal';
 import { CallOutcomeModal } from '../components/CallOutcomeModal';
+import { FullPageLeadEdit } from '../components/FullPageLeadEdit';
 import { ServiceTypeBadge } from '../components/ServiceTypeBadge';
 import { Plus, Phone, ClipboardEdit, Edit, RefreshCw } from 'lucide-react';
 import { DeleteConfirmAction } from '../components/DeleteConfirmAction';
@@ -18,9 +19,9 @@ export const SujalList: React.FC = () => {
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedItemForConversion, setSelectedItemForConversion] = useState<SujalCallListItem | null>(null);
-  const [selectedLeadForEdit, setSelectedLeadForEdit] = useState<Lead | null>(null);
   const [selectedLeadForCall, setSelectedLeadForCall] = useState<Lead | null>(null);
   const [bookingLead, setBookingLead] = useState<Lead | null>(null);
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
 
   const [openLogCallRowId, setOpenLogCallRowId] = useState<string | null>(null);
 
@@ -40,6 +41,21 @@ export const SujalList: React.FC = () => {
       .filter(l => l.leadType === 'Retarget')
       .sort((a, b) => new Date(b.createdDate || 0).getTime() - new Date(a.createdDate || 0).getTime());
   }, [leads]);
+
+  const handleEditLead = (lead: Lead) => {
+    setEditingLead(lead);
+  };
+
+  const activeLeadToEdit = editingLead ? (leads.find(l => l.id === editingLead.id) || editingLead) : null;
+
+  if (activeLeadToEdit) {
+    return (
+      <FullPageLeadEdit
+        lead={activeLeadToEdit}
+        onClose={() => setEditingLead(null)}
+      />
+    );
+  }
 
   const handleDelete = async (id: string) => {
     try {
@@ -132,7 +148,7 @@ export const SujalList: React.FC = () => {
       </div>
 
       {/* Retarget Leads Backlog Table */}
-      <div className="surface-panel" style={{ padding: '1.5rem', marginBottom: '2.5rem', borderRadius: '12px' }}>
+      <div className="surface-panel" style={{ padding: '1.25rem 0.75rem', marginBottom: '2.5rem', borderRadius: '12px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
             <RefreshCw size={20} className="text-warning" />
@@ -170,7 +186,13 @@ export const SujalList: React.FC = () => {
                 <tr key={lead.id}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', flexWrap: 'wrap' }}>
-                      <strong>{lead.customerName || 'Unknown'}</strong>
+                      <strong
+                        style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                        onClick={() => handleEditLead(lead)}
+                        title="Click to edit lead"
+                      >
+                        {lead.customerName || 'Unknown'}
+                      </strong>
                       {lead.isVip && <span className="badge badge-vip">VIP</span>}
                       <ServiceTypeBadge serviceType={lead.serviceType} compact />
                     </div>
@@ -185,14 +207,14 @@ export const SujalList: React.FC = () => {
                       {lead.retargetTimeSlot === 'morning' ? '☀️ Morning' : lead.retargetTimeSlot === 'evening' ? '🌙 Evening' : 'Unscheduled'}
                     </span>
                   </td>
-                  <td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
                     <span className={isBefore(new Date(lead.nextFollowUpDate), today) ? 'text-danger font-bold' : ''}>
                       {lead.nextFollowUpDate}
                     </span>
                   </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                      <button className="btn btn-secondary btn-sm" onClick={() => setSelectedLeadForEdit(lead)}>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'nowrap' }}>
+                      <button className="btn btn-secondary btn-sm" onClick={() => handleEditLead(lead)}>
                         <Edit size={14} /> Edit
                       </button>
                       <button className="btn btn-primary btn-sm" onClick={() => setSelectedLeadForCall(lead)}>
@@ -212,7 +234,7 @@ export const SujalList: React.FC = () => {
       </div>
 
       {/* Quick Tag Call List Section */}
-      <div className="surface-panel" style={{ padding: '1.5rem', borderRadius: '12px' }}>
+      <div className="surface-panel" style={{ padding: '1.25rem 0.75rem', borderRadius: '12px' }}>
         <div style={{ marginBottom: '1rem', borderBottom: '1px solid var(--border-color)', paddingBottom: '0.75rem' }}>
           <h2 style={{ fontSize: '1.15rem', fontWeight: 600, margin: 0 }}>Quick Tag Call List</h2>
           <p style={{ margin: 0, marginTop: '0.25rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
@@ -220,7 +242,7 @@ export const SujalList: React.FC = () => {
           </p>
         </div>
 
-        <div className="add-item-form" style={{ marginBottom: '1.5rem' }}>
+        <div className="add-item-form" style={{ marginBottom: '1.5rem', padding: '1rem 0.5rem' }}>
           <form onSubmit={handleAdd}>
             <div className="form-group row-align" style={{ gap: '1rem', display: 'flex', alignItems: 'center', marginBottom: 0 }}>
               <input 
@@ -269,13 +291,13 @@ export const SujalList: React.FC = () => {
                   <td>
                     <span className={`badge ${getStatusBadgeClass(item.status)}`}>{item.status}</span>
                   </td>
-                  <td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
                     <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
                       {new Date(item.dateAdded).toLocaleDateString()}
                     </span>
                   </td>
-                  <td>
-                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'nowrap' }}>
                       <DeleteConfirmAction
                         size="sm"
                         onConfirm={() => handleDelete(item.id)}
@@ -338,17 +360,15 @@ export const SujalList: React.FC = () => {
         </div>
       </div>
 
-      {(isModalOpen || !!selectedLeadForEdit || !!bookingLead) && (
+      {(isModalOpen || !!bookingLead) && (
         <AddLeadModal 
-          isOpen={isModalOpen || !!selectedLeadForEdit || !!bookingLead} 
+          isOpen={isModalOpen || !!bookingLead} 
           onClose={() => {
             setIsModalOpen(false);
             setSelectedItemForConversion(null);
-            setSelectedLeadForEdit(null);
             setBookingLead(null);
           }} 
           initialData={
-            selectedLeadForEdit ||
             bookingLead ||
             (selectedItemForConversion ? {
               leadSource: 'SalesIQ',

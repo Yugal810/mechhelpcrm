@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useLeadContext } from '../store/LeadContext';
 import { AddLeadModal } from '../components/AddLeadModal';
+import { FullPageLeadEdit } from '../components/FullPageLeadEdit';
 import { ServiceTypeBadge } from '../components/ServiceTypeBadge';
 import type { Lead } from '../types';
 
@@ -9,6 +10,7 @@ export const Kanban: React.FC = () => {
   const stages = ['Fresh Lead', 'Call Not Received', 'Details Shared', 'Shared Quotation', 'Retarget', 'Booked', 'Completed', 'Lost'];
 
   const [bookingLead, setBookingLead] = useState<Lead | null>(null);
+  const [editingLead, setEditingLead] = useState<Lead | null>(null);
 
   const onDragStart = (e: React.DragEvent, leadId: string) => {
     e.dataTransfer.setData('leadId', leadId);
@@ -23,14 +25,35 @@ export const Kanban: React.FC = () => {
     const lead = leads.find(l => l.id === leadId);
     if (!lead || lead.leadType === newStage) return;
 
+    const todayStr = new Date().toISOString().split('T')[0];
     if (newStage === 'Booked') {
       // Open modal to fill booking details
-      setBookingLead({ ...lead, leadType: 'Booked' });
+      setBookingLead({ 
+        ...lead, 
+        leadType: 'Booked',
+        bookingDateTime: todayStr,
+        nextFollowUpDate: todayStr
+      });
+    } else if (newStage === 'Retarget') {
+      updateLead({ 
+        ...lead, 
+        leadType: 'Retarget',
+        nextFollowUpDate: todayStr 
+      });
     } else {
       // Just update stage immediately
       updateLead({ ...lead, leadType: newStage as any });
     }
   };
+
+  if (editingLead) {
+    return (
+      <FullPageLeadEdit
+        lead={editingLead}
+        onClose={() => setEditingLead(null)}
+      />
+    );
+  }
 
   return (
     <div className="kanban animate-fade-in" style={{ display: 'flex', gap: '1rem', overflowX: 'auto', paddingBottom: '1rem', height: '100%' }}>
@@ -57,7 +80,13 @@ export const Kanban: React.FC = () => {
                   onDragStart={e => onDragStart(e, lead.id)}
                 >
                   <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-                    <strong style={{ fontSize: '0.875rem' }}>{lead.customerName || 'Unknown'}</strong>
+                    <strong 
+                      style={{ fontSize: '0.875rem', cursor: 'pointer', textDecoration: 'underline' }}
+                      onClick={() => setEditingLead(lead)}
+                      title="Click to edit lead"
+                    >
+                      {lead.customerName || 'Unknown'}
+                    </strong>
                     <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
                       <span className="badge badge-gray text-[10px] px-1 py-0">
                         {lead.priority === 'High' ? '🔴' : lead.priority === 'Low' ? '🟢' : '🟡'}

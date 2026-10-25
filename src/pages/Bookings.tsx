@@ -32,25 +32,26 @@ export const Bookings: React.FC = () => {
   const [completedLead, setCompletedLead] = useState<Lead | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [notifyingId, setNotifyingId] = useState<string | null>(null);
 
   useEffect(() => {
     const urlFilter = searchParams.get('filter');
     if (urlFilter) setFilter(urlFilter);
   }, [searchParams]);
 
-  // Include any lead that has a bookingDateTime (Booked, Completed, Lost/Cancelled)
-  const allBookings = leads.filter(l => l.bookingDateTime);
+  // Include any lead that is Booked or has a bookingDateTime (Booked, Completed, Lost/Cancelled)
+  const allBookings = leads.filter(l => l.leadType === 'Booked' || l.bookingDateTime);
 
   const filteredData = useMemo(() => {
     let data = allBookings;
 
     // Apply specific filter
     if (filter === 'today') {
-      data = data.filter(l => l.leadType === 'Booked' && isToday(parseBookingDate(l.bookingDateTime)));
+      data = data.filter(l => l.leadType === 'Booked' && isToday(parseBookingDate(l.bookingDateTime || l.nextFollowUpDate)));
     } else if (filter === 'tomorrow') {
-      data = data.filter(l => l.leadType === 'Booked' && isTomorrow(parseBookingDate(l.bookingDateTime)));
+      data = data.filter(l => l.leadType === 'Booked' && isTomorrow(parseBookingDate(l.bookingDateTime || l.nextFollowUpDate)));
     } else if (filter === 'unnotified') {
-      data = data.filter(l => l.leadType === 'Booked' && isTomorrow(parseBookingDate(l.bookingDateTime)) && !l.garageNotified);
+      data = data.filter(l => l.leadType === 'Booked' && isTomorrow(parseBookingDate(l.bookingDateTime || l.nextFollowUpDate)) && !l.garageNotified);
     } else if (filter === 'rescheduled') {
       data = data.filter(l => (l.bookingHistory?.length || 0) > 0);
     } else if (filter === 'completed') {
@@ -59,7 +60,6 @@ export const Bookings: React.FC = () => {
       data = data.filter(l => l.leadType === 'Lost');
     } else if (filter === 'all') {
       // 'All Bookings' — every booking ever created regardless of status (spec §11)
-      // No additional filter: allBookings already scopes to leads with a bookingDateTime
     }
 
     // Apply search across multiple fields
@@ -89,9 +89,19 @@ export const Bookings: React.FC = () => {
     }
   };
 
-  const handleMarkNotified = (leadId: string) => {
-    const lead = leads.find(l => l.id === leadId);
-    if (lead) updateLead({ ...lead, garageNotified: true });
+  const handleMarkNotified = async (leadId: string) => {
+    try {
+      setNotifyingId(leadId);
+      const lead = leads.find(l => l.id === leadId);
+      if (lead) {
+        await updateLead({ ...lead, garageNotified: true });
+      }
+    } catch (err: any) {
+      console.error('Failed to mark garage notified:', err);
+      alert('Failed to mark garage as notified. Please try again.');
+    } finally {
+      setNotifyingId(null);
+    }
   };
 
   const handleSaveReschedule = async (updatedLead: Lead) => {
@@ -265,9 +275,9 @@ export const Bookings: React.FC = () => {
                           <button 
                             className="btn btn-primary btn-sm" 
                             onClick={() => handleMarkNotified(lead.id)}
-                            disabled={deletingId === lead.id}
+                            disabled={deletingId === lead.id || notifyingId === lead.id}
                           >
-                            Mark Notified
+                            {notifyingId === lead.id ? 'Marking...' : 'Mark Notified'}
                           </button>
                         )}
                         {lead.garageNotified && isConfirmed && lead.leadType !== 'Completed' && (

@@ -1,0 +1,314 @@
+/* ========================================================
+   MechHelp Split-Screen Login Page (Matching Design Mockup)
+   ======================================================== */
+
+.login-canvas {
+  min-height: 100vh;
+  width: 100vw;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #ebedf0;
+  padding: 1.5rem;
+  box-sizing: border-box;
+}
+
+.login-card-container {
+  width: 100%;
+  max-width: 900px;
+  background: #ffffff;
+  border-radius: 26px;
+  box-shadow: 0 20px 50px -15px rgba(0, 0, 0, 0.08), 0 0 1px 1px rgba(0, 0, 0, 0.03);
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  overflow: hidden;
+  border: 1px solid rgba(229, 231, 235, 0.9);
+}
+
+/* ─── Left Panel: Dotted Pattern & Brand Hero ───────── */
+.login-left-panel {
+  background-color: #fafbfc;
+  background-image: radial-gradient(#d1d5db 1.2px, transparent 1.2px);
+  background-size: 16px 16px;
+  padding: 3.5rem 3.25rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 480px;
+  box-sizing: border-box;
+}
+
+.login-brand-header {
+  display: flex;
+  align-items: center;
+}
+
+.login-brand-logo {
+  height: 62px;
+  width: auto;
+  object-fit: contain;
+}
+
+.login-hero-headline-wrapper {
+  margin: 2.5rem 0;
+}
+
+.login-hero-headline {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Inter, sans-serif;
+  font-size: 2.75rem;
+  font-weight: 800;
+  line-height: 1.12;
+  letter-spacing: -0.025em;
+  color: #0f172a;
+  margin: 0;
+}
+
+.login-hero-highlight {
+  color: #f97316; /* MechHelp Brand Orange */
+}
+
+.login-hero-footer {
+  margin-top: auto;
+}
+
+.login-hero-tagline {
+  font-family: "Georgia", "Cambria", "Times New Roman", serif;
+  font-size: 1.25rem;
+  font-weight: 700;
+  line-height: 1.35;
+  color: #0f172a;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+/* ─── Right Panel: Login Form ───────────────────────── */
+.login-right-panel {
+  background: #ffffff;
+  padding: 3.5rem 3.25rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.login-form-box {
+  width: 100%;
+}
+
+.login-form-header {
+  margin-bottom: 2rem;
+}
+
+.login-form-title {
+  font-family: "Georgia", "Cambria", "Times New Roman", serif;
+  font-size: 1.95rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 0.35rem 0;
+  letter-spacing: -0.02em;
+}
+
+.login-form-subtitle {
+  font-size: 0.88rem;
+  color: #6b7280;
+  margin: 0;
+  line-height: 1.4;
+}
+
+/* Alerts */
+.login-alert {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.75rem 0.95rem;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  margin-bottom: 1.5rem;
+  line-height: 1.4;
+}
+
+.login-alert-error {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+}
+
+.login-alert-success {
+  background-color: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #16a34a;
+}
+
+/* Inputs Form */
+.login-inputs-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.35rem;
+}
+
+.login-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+}
+
+.login-field-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #1f2937;
+  text-transform: uppercase;
+}
+
+.login-field-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.login-forgot-link {
+  background: none;
+  border: none;
+  padding: 0;
+  color: #f97316;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+}
+
+.login-forgot-link:hover {
+  text-decoration: underline;
+  opacity: 0.9;
+}
+
+.login-field-input {
+  height: 46px;
+  width: 100%;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 0 1rem;
+  font-size: 0.9rem;
+  color: #111827;
+  background-color: #ffffff;
+  box-sizing: border-box;
+  transition: all 0.15s ease;
+}
+
+.login-field-input::placeholder {
+  color: #9ca3af;
+}
+
+.login-field-input:focus {
+  outline: none;
+  border-color: #f97316;
+  box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.15);
+}
+
+.login-field-input:disabled {
+  background-color: #f9fafb;
+  color: #6b7280;
+  cursor: not-allowed;
+}
+
+/* Password wrapper */
+.login-password-input-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+  width: 100%;
+}
+
+.login-password-input {
+  padding-right: 2.75rem;
+}
+
+.login-password-toggle-btn {
+  position: absolute;
+  right: 0.75rem;
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  color: #9ca3af;
+  cursor: pointer;
+  padding: 0.35rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 0.15s ease;
+}
+
+.login-password-toggle-btn:hover {
+  color: #4b5563;
+}
+
+/* Submit Button */
+.login-submit-button {
+  height: 46px;
+  width: 100%;
+  background-color: #000000;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.92rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: background-color 0.15s ease;
+}
+
+.login-submit-button:hover {
+  background-color: #1f2937;
+}
+
+.login-submit-button:disabled {
+  background-color: #4b5563;
+  opacity: 0.75;
+  cursor: not-allowed;
+}
+
+.login-back-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: none;
+  border: none;
+  color: #6b7280;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 0.5rem;
+  transition: color 0.15s ease;
+}
+
+.login-back-button:hover {
+  color: #111827;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .login-card-container {
+    grid-template-columns: 1fr;
+    max-width: 440px;
+    border-radius: 20px;
+  }
+
+  .login-left-panel {
+    padding: 2.5rem 2rem;
+    min-height: auto;
+  }
+
+  .login-hero-headline {
+    font-size: 2.15rem;
+  }
+
+  .login-right-panel {
+    padding: 2.5rem 2rem;
+  }
+}
