@@ -46,8 +46,7 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isEditingLead, setIsEditingLead] = useState(false);
 
   const knownLeadIdsRef = useRef<Set<string>>(new Set());
-  const knownBookedLeadIdsRef = useRef<Set<string>>(new Set());
-  const notifiedKeysRef = useRef<Map<string, number>>(new Map());
+  const notifiedIdsRef = useRef<Set<string>>(new Set());
   const initialLoadDoneRef = useRef(false);
   const [toasts, setToasts] = useState<ToastData[]>([]);
 
@@ -60,19 +59,7 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
-  const isRecentlyCreatedOrUpdated = (lead: Lead): boolean => {
-    const times = [
-      lead.createdDate ? new Date(lead.createdDate).getTime() : 0,
-      lead.lastContactedDate ? new Date(lead.lastContactedDate).getTime() : 0,
-      (lead as any).updated_at ? new Date((lead as any).updated_at).getTime() : 0,
-    ].filter(t => !isNaN(t) && t > 0);
-
-    if (times.length === 0) return false;
-    const latestTime = Math.max(...times);
-    // Must be within the last 2 minutes (120,000 ms)
-    return Date.now() - latestTime < 120000;
-  };
-
+  // fetchAllData ONLY fetches and updates state — ZERO sound triggers here to prevent loops!
   const fetchAllData = useCallback(async (isSilent = false) => {
     try {
       if (!isSilent) setIsLoading(true);
@@ -82,61 +69,14 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
         CallListService.getItems()
       ]);
 
-      if (initialLoadDoneRef.current) {
-        // 1. Detect Newly Confirmed Bookings via Polling
-        const newlyBooked = fetchedLeads.filter(l => {
-          if (l.leadType !== 'Booked') return false;
-          const key = `booked-${l.id}`;
-          const lastNotified = notifiedKeysRef.current.get(key) || 0;
-          const notRecentlyNotified = Date.now() - lastNotified > 15000;
-          return (!knownBookedLeadIdsRef.current.has(l.id) || notRecentlyNotified) && isRecentlyCreatedOrUpdated(l);
-        });
-
-        if (newlyBooked.length > 0) {
-          console.log('🚗 Newly confirmed booking from polling:', newlyBooked);
-          playBookingSound();
-          newlyBooked.forEach(lead => {
-            notifiedKeysRef.current.set(`booked-${lead.id}`, Date.now());
-            knownBookedLeadIdsRef.current.add(lead.id);
-            addToast({
-              type: 'success',
-              title: '🚗 Booking Confirmed!',
-              message: `${lead.customerName || 'Customer'} • ${lead.garageAssigned || 'Partner Garage'} (${lead.bookingType || 'Visit'})`.trim(),
-              duration: 6000,
-            });
-          });
-        }
-
-        // 2. Detect Brand New Fresh Leads via Polling
-        const newlyAdded = fetchedLeads.filter(l => {
-          if (l.leadType === 'Booked') return false;
-          const key = `lead-${l.id}`;
-          const lastNotified = notifiedKeysRef.current.get(key) || 0;
-          const notRecentlyNotified = Date.now() - lastNotified > 15000;
-          return (!knownLeadIdsRef.current.has(l.id) || notRecentlyNotified) && isRecentlyCreatedOrUpdated(l);
-        });
-
-        if (newlyAdded.length > 0) {
-          console.log('🔔 Truly new fresh lead from polling:', newlyAdded);
-          playNewLeadSound();
-          newlyAdded.forEach(lead => {
-            notifiedKeysRef.current.set(`lead-${lead.id}`, Date.now());
-            addToast({
-              type: 'success',
-              title: '🔔 New Lead Received!',
-              message: `${lead.customerName || 'New Customer'} • ${lead.carBrand || ''} ${lead.carModel || ''}`.trim(),
-              duration: 5000,
-            });
-          });
-        }
-      } else {
+      if (!initialLoadDoneRef.current) {
         initialLoadDoneRef.current = true;
-        // Seed all existing historical leads so they never trigger a notification
+        // Seed all existing historical leads on startup so they NEVER ring
         fetchedLeads.forEach(l => {
-          notifiedKeysRef.current.set(`lead-${l.id}`, Date.now());
+          notifiedIdsRef.current.add(l.id);
+          notifiedIdsRef.current.add(`${l.id}-lead`);
           if (l.leadType === 'Booked') {
-            knownBookedLeadIdsRef.current.add(l.id);
-            notifiedKeysRef.current.set(`booked-${l.id}`, Date.now());
+            notifiedIdsRef.current.add(`${l.id}-booked`);
           }
         });
       }
@@ -149,7 +89,7 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       if (!isSilent) setIsLoading(false);
     }
-  }, [addToast]);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -198,30 +138,32 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .on('broadcast', { event: 'new_lead' }, (eventObj: any) => {
             const payload = eventObj?.payload;
             console.log('⚡ Direct Realtime Event Received:', payload);
-            if (mounted && payload) {
+            if (mounted && payload && payload.id) {
               const isBooking = payload.action === 'booked' || payload.leadType === 'Booked';
               const notifKey = `${payload.id}-${isBooking ? 'booked' : 'lead'}`;
-              const lastNotified = notifiedKeysRef.current.get(notifKey) || 0;
 
-              if (Date.now() - lastNotified > 5000) {
-                notifiedKeysRef.current.set(notifKey, Date.now());
-                if (isBooking) {
-                  playBookingSound();
-                  addToast({
-                    type: 'success',
-                    title: '🚗 Booking Confirmed!',
-                    message: `${payload.customerName || payload.name || 'Customer'} • ${payload.garage || 'Partner Garage'} (${payload.bookingType || 'Visit'})`.trim(),
-                    duration: 6000,
-                  });
-                } else {
-                  playNewLeadSound();
-                  addToast({
-                    type: 'success',
-                    title: '🔔 New Lead Received!',
-                    message: `${payload.name || payload.customerName || 'New Customer'} • ${payload.carBrand || ''} ${payload.carModel || ''}`.trim(),
-                    duration: 5000,
-                  });
-                }
+              // Bulletproof single-notification check: only notify once per session
+              if (notifiedIdsRef.current.has(notifKey)) {
+                return;
+              }
+              notifiedIdsRef.current.add(notifKey);
+
+              if (isBooking) {
+                playBookingSound();
+                addToast({
+                  type: 'success',
+                  title: '🚗 Booking Confirmed!',
+                  message: `${payload.customerName || payload.name || 'Customer'} • ${payload.garage || 'Partner Garage'} (${payload.bookingType || 'Visit'})`.trim(),
+                  duration: 6000,
+                });
+              } else {
+                playNewLeadSound();
+                addToast({
+                  type: 'success',
+                  title: '🔔 New Lead Received!',
+                  message: `${payload.name || payload.customerName || 'New Customer'} • ${payload.carBrand || ''} ${payload.carModel || ''}`.trim(),
+                  duration: 5000,
+                });
               }
               fetchAllData(true);
             }
@@ -232,7 +174,7 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
     }
 
-    // 2. High-reliability lightweight polling (checks only top 5 recent leads, ultra fast, no network strain)
+    // 2. High-reliability lightweight polling (checks top 5 recent leads, only notifies unnotified recent leads)
     const pollInterval = setInterval(async () => {
       if (!mounted || !useSupabase) return;
       try {
@@ -246,19 +188,25 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
         let needsFullRefresh = false;
         latestRows.forEach((row: any) => {
+          if (!row || !row.id) return;
           const isBooking = row.lead_type === 'Booked';
           const notifKey = `${row.id}-${isBooking ? 'booked' : 'lead'}`;
-          const lastNotified = notifiedKeysRef.current.get(notifKey) || 0;
 
-          // Check if created or contacted in the last 2 minutes
-          const times = [
-            row.created_date ? new Date(row.created_date).getTime() : 0,
-            row.last_contacted_date ? new Date(row.last_contacted_date).getTime() : 0,
-          ].filter(t => !isNaN(t) && t > 0);
-          const isRecent = times.length > 0 && (Date.now() - Math.max(...times) < 120000);
+          // Already notified in this session? Skip permanently!
+          if (notifiedIdsRef.current.has(notifKey)) {
+            return;
+          }
 
-          if (isRecent && Date.now() - lastNotified > 10000) {
-            notifiedKeysRef.current.set(notifKey, Date.now());
+          // Check if created or updated recently (within last 3 minutes)
+          const createdMs = row.created_date ? new Date(row.created_date).getTime() : 0;
+          const contactedMs = row.last_contacted_date ? new Date(row.last_contacted_date).getTime() : 0;
+          const isRecentlyCreated = createdMs > 0 && (Date.now() - createdMs < 180000);
+          const isRecentlyContacted = contactedMs > 0 && (Date.now() - contactedMs < 180000);
+          const isRelevant = isBooking ? (isRecentlyCreated || isRecentlyContacted) : isRecentlyCreated;
+
+          if (isRelevant) {
+            // Mark permanently as notified so it NEVER rings again
+            notifiedIdsRef.current.add(notifKey);
             needsFullRefresh = true;
 
             if (isBooking) {

@@ -49,10 +49,20 @@ if (typeof window !== 'undefined') {
   });
 }
 
+let lastLeadSoundAt = 0;
+let lastBookingSoundAt = 0;
+
 /**
  * Plays the "New Lead" notification sound directly from embedded Base64 MP3
  */
 export function playNewLeadSound() {
+  const now = Date.now();
+  if (now - lastLeadSoundAt < 2000) {
+    console.log('Skipping duplicate lead sound (debounced)');
+    return;
+  }
+  lastLeadSoundAt = now;
+
   try {
     const audio = new Audio(NEW_LEAD_SOUND_B64);
     audio.volume = 1.0;
@@ -73,6 +83,13 @@ export function playNewLeadSound() {
  * Plays the "Booking Confirmed" notification sound directly from embedded Base64 MP3
  */
 export function playBookingSound() {
+  const now = Date.now();
+  if (now - lastBookingSoundAt < 2000) {
+    console.log('Skipping duplicate booking sound (debounced)');
+    return;
+  }
+  lastBookingSoundAt = now;
+
   try {
     const audio = new Audio(BOOKING_SOUND_B64);
     audio.volume = 1.0;
