@@ -6,21 +6,7 @@
  * Automatically falls back to Web Audio API chimes if playback is blocked or file is missing.
  */
 
-let newLeadAudio: HTMLAudioElement | null = null;
-let bookingAudio: HTMLAudioElement | null = null;
 let audioCtx: AudioContext | null = null;
-
-if (typeof window !== 'undefined') {
-  try {
-    newLeadAudio = new Audio('/sounds/new-lead.mp3');
-    newLeadAudio.preload = 'auto';
-
-    bookingAudio = new Audio('/sounds/booking.mp3');
-    bookingAudio.preload = 'auto';
-  } catch (err) {
-    console.warn('Audio elements could not be pre-initialized:', err);
-  }
-}
 
 function getAudioContext(): AudioContext | null {
   if (typeof window === 'undefined') return null;
@@ -41,12 +27,14 @@ function getAudioContext(): AudioContext | null {
   return audioCtx;
 }
 
-// Auto-unlock audio elements and AudioContext on first user interaction anywhere on the window
+// Preload & Auto-unlock audio on any user interaction
 if (typeof window !== 'undefined') {
-  const unlockAudio = () => {
+  const unlock = () => {
     try {
-      if (newLeadAudio) newLeadAudio.load();
-      if (bookingAudio) bookingAudio.load();
+      const a1 = new Audio('/sounds/new-lead.mp3');
+      const a2 = new Audio('/sounds/booking.mp3');
+      a1.load();
+      a2.load();
 
       const ctx = getAudioContext();
       if (ctx && ctx.state === 'suspended') {
@@ -55,58 +43,48 @@ if (typeof window !== 'undefined') {
     } catch (e) {
       // Ignored
     }
-
-    window.removeEventListener('click', unlockAudio);
-    window.removeEventListener('keydown', unlockAudio);
-    window.removeEventListener('touchstart', unlockAudio);
   };
-  window.addEventListener('click', unlockAudio, { passive: true });
-  window.addEventListener('keydown', unlockAudio, { passive: true });
-  window.addEventListener('touchstart', unlockAudio, { passive: true });
+  ['click', 'keydown', 'touchstart', 'mousedown', 'pointerdown'].forEach((evt) => {
+    window.addEventListener(evt, unlock, { once: true, passive: true });
+  });
 }
 
 /**
- * Plays the "New Lead" notification sound (from /sounds/new-lead.mp3)
+ * Plays the "New Lead" notification sound (/sounds/new-lead.mp3)
  */
 export function playNewLeadSound() {
-  if (newLeadAudio) {
-    try {
-      newLeadAudio.currentTime = 0;
-      const playPromise = newLeadAudio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch((err) => {
-          console.warn('New lead MP3 playback issue, falling back to chime:', err);
-          playSyntheticLeadChime();
-        });
-      }
-      return;
-    } catch (err) {
-      console.warn('HTML5 Audio error, using synthetic fallback:', err);
+  try {
+    const audio = new Audio('/sounds/new-lead.mp3');
+    audio.volume = 1.0;
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch((err) => {
+        console.warn('MP3 play error, using fallback chime:', err);
+        playSyntheticLeadChime();
+      });
     }
+  } catch (err) {
+    playSyntheticLeadChime();
   }
-  playSyntheticLeadChime();
 }
 
 /**
- * Plays the "Booking Confirmed" notification sound (from /sounds/booking.mp3)
+ * Plays the "Booking Confirmed" notification sound (/sounds/booking.mp3)
  */
 export function playBookingSound() {
-  if (bookingAudio) {
-    try {
-      bookingAudio.currentTime = 0;
-      const playPromise = bookingAudio.play();
-      if (playPromise !== undefined) {
-        playPromise.catch((err) => {
-          console.warn('Booking MP3 playback issue, falling back to chime:', err);
-          playSyntheticBookingChime();
-        });
-      }
-      return;
-    } catch (err) {
-      console.warn('HTML5 Audio error, using synthetic fallback:', err);
+  try {
+    const audio = new Audio('/sounds/booking.mp3');
+    audio.volume = 1.0;
+    const playPromise = audio.play();
+    if (playPromise !== undefined) {
+      playPromise.catch((err) => {
+        console.warn('MP3 play error, using fallback chime:', err);
+        playSyntheticBookingChime();
+      });
     }
+  } catch (err) {
+    playSyntheticBookingChime();
   }
-  playSyntheticBookingChime();
 }
 
 /**
@@ -122,7 +100,7 @@ function playSyntheticLeadChime() {
       const gain1 = ctx.createGain();
       osc1.type = 'sine';
       osc1.frequency.setValueAtTime(587.33, now);
-      gain1.gain.setValueAtTime(0.35, now);
+      gain1.gain.setValueAtTime(0.4, now);
       gain1.gain.exponentialRampToValueAtTime(0.001, now + 0.45);
       osc1.connect(gain1);
       gain1.connect(ctx.destination);
@@ -134,7 +112,7 @@ function playSyntheticLeadChime() {
       osc2.type = 'sine';
       osc2.frequency.setValueAtTime(880.0, now + 0.12);
       gain2.gain.setValueAtTime(0, now);
-      gain2.gain.setValueAtTime(0.4, now + 0.12);
+      gain2.gain.setValueAtTime(0.45, now + 0.12);
       gain2.gain.exponentialRampToValueAtTime(0.001, now + 0.7);
       osc2.connect(gain2);
       gain2.connect(ctx.destination);
@@ -168,7 +146,7 @@ function playSyntheticBookingChime() {
         const gain = ctx.createGain();
         osc.type = 'sine';
         osc.frequency.setValueAtTime(freq, startTime);
-        gain.gain.setValueAtTime(0.35, startTime);
+        gain.gain.setValueAtTime(0.4, startTime);
         gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.4);
         osc.connect(gain);
         gain.connect(ctx.destination);

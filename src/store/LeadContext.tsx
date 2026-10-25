@@ -47,7 +47,7 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const knownLeadIdsRef = useRef<Set<string>>(new Set());
   const knownBookedLeadIdsRef = useRef<Set<string>>(new Set());
-  const notifiedLeadIdsRef = useRef<Set<string>>(new Set());
+  const notifiedKeysRef = useRef<Map<string, number>>(new Map());
   const initialLoadDoneRef = useRef(false);
   const [toasts, setToasts] = useState<ToastData[]>([]);
 
@@ -69,8 +69,8 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     if (times.length === 0) return false;
     const latestTime = Math.max(...times);
-    // Must be within the last 3 minutes (180,000 ms)
-    return Date.now() - latestTime < 180000;
+    // Must be within the last 2 minutes (120,000 ms)
+    return Date.now() - latestTime < 120000;
   };
 
   const fetchAllData = useCallback(async (isSilent = false) => {
@@ -83,19 +83,20 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ]);
 
       if (initialLoadDoneRef.current) {
-        // 1. Detect Newly Confirmed Bookings (either newly inserted or transitioned to Booked)
-        const newlyBooked = fetchedLeads.filter(
-          l => l.leadType === 'Booked' &&
-               !knownBookedLeadIdsRef.current.has(l.id) &&
-               !notifiedLeadIdsRef.current.has(`${l.id}-booked`) &&
-               isRecentlyCreatedOrUpdated(l)
-        );
+        // 1. Detect Newly Confirmed Bookings via Polling
+        const newlyBooked = fetchedLeads.filter(l => {
+          if (l.leadType !== 'Booked') return false;
+          const key = `booked-${l.id}`;
+          const lastNotified = notifiedKeysRef.current.get(key) || 0;
+          const notRecentlyNotified = Date.now() - lastNotified > 15000;
+          return (!knownBookedLeadIdsRef.current.has(l.id) || notRecentlyNotified) && isRecentlyCreatedOrUpdated(l);
+        });
 
         if (newlyBooked.length > 0) {
-          console.log('🚗 Newly confirmed booking:', newlyBooked);
+          console.log('🚗 Newly confirmed booking from polling:', newlyBooked);
           playBookingSound();
           newlyBooked.forEach(lead => {
-            notifiedLeadIdsRef.current.add(`${lead.id}-booked`);
+            notifiedKeysRef.current.set(`booked-${lead.id}`, Date.now());
             knownBookedLeadIdsRef.current.add(lead.id);
             addToast({
               type: 'success',
@@ -106,19 +107,20 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
           });
         }
 
-        // 2. Detect Brand New Fresh Leads (non-booked)
-        const newlyAdded = fetchedLeads.filter(
-          l => l.leadType !== 'Booked' &&
-               !knownLeadIdsRef.current.has(l.id) &&
-               !notifiedLeadIdsRef.current.has(l.id) &&
-               isRecentlyCreatedOrUpdated(l)
-        );
+        // 2. Detect Brand New Fresh Leads via Polling
+        const newlyAdded = fetchedLeads.filter(l => {
+          if (l.leadType === 'Booked') return false;
+          const key = `lead-${l.id}`;
+          const lastNotified = notifiedKeysRef.current.get(key) || 0;
+          const notRecentlyNotified = Date.now() - lastNotified > 15000;
+          return (!knownLeadIdsRef.current.has(l.id) || notRecentlyNotified) && isRecentlyCreatedOrUpdated(l);
+        });
 
         if (newlyAdded.length > 0) {
-          console.log('🔔 Truly new incoming fresh lead:', newlyAdded);
+          console.log('🔔 Truly new fresh lead from polling:', newlyAdded);
           playNewLeadSound();
           newlyAdded.forEach(lead => {
-            notifiedLeadIdsRef.current.add(lead.id);
+            notifiedKeysRef.current.set(`lead-${lead.id}`, Date.now());
             addToast({
               type: 'success',
               title: '🔔 New Lead Received!',
@@ -131,10 +133,10 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
         initialLoadDoneRef.current = true;
         // Seed all existing historical leads so they never trigger a notification
         fetchedLeads.forEach(l => {
-          notifiedLeadIdsRef.current.add(l.id);
+          notifiedKeysRef.current.set(`lead-${l.id}`, Date.now());
           if (l.leadType === 'Booked') {
             knownBookedLeadIdsRef.current.add(l.id);
-            notifiedLeadIdsRef.current.add(`${l.id}-booked`);
+            notifiedKeysRef.current.set(`booked-${l.id}`, Date.now());
           }
         });
       }
@@ -193,8 +195,36 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
           .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_history' }, () => {
             if (mounted) fetchAllData(true);
           })
-          .on('broadcast', { event: 'new_lead' }, () => {
-            if (mounted) fetchAllData(true);
+          .on('broadcast', { event: 'new_lead' }, (eventObj: any) => {
+            const payload = eventObj?.payload;
+            console.log('⚡ Direct Realtime Event Received:', payload);
+            if (mounted && payload) {
+              const isBooking = payload.action === 'booked' || payload.leadType === 'Booked';
+              const notifKey = `${payload.id}-${isBooking ? 'booked' : 'lead'}`;
+              const lastNotified = notifiedKeysRef.current.get(notifKey) || 0;
+
+              if (Date.now() - lastNotified > 5000) {
+                notifiedKeysRef.current.set(notifKey, Date.now());
+                if (isBooking) {
+                  playBookingSound();
+                  addToast({
+                    type: 'success',
+                    title: '🚗 Booking Confirmed!',
+                    message: `${payload.customerName || payload.name || 'Customer'} • ${payload.garage || 'Partner Garage'} (${payload.bookingType || 'Visit'})`.trim(),
+                    duration: 6000,
+                  });
+                } else {
+                  playNewLeadSound();
+                  addToast({
+                    type: 'success',
+                    title: '🔔 New Lead Received!',
+                    message: `${payload.name || payload.customerName || 'New Customer'} • ${payload.carBrand || ''} ${payload.carModel || ''}`.trim(),
+                    duration: 5000,
+                  });
+                }
+              }
+              fetchAllData(true);
+            }
           })
           .subscribe();
       } catch (err) {
