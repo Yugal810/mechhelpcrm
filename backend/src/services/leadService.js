@@ -58,7 +58,7 @@ export function getTomorrowYmd() {
 
 export function broadcastLeadChange(payload = {}) {
   try {
-    const channel = supabase.channel("crm-realtime-broadcast");
+    const channel = supabase.channel("crm-realtime-leads");
     channel.subscribe((status) => {
       if (status === "SUBSCRIBED") {
         channel
@@ -472,6 +472,17 @@ export async function updateLeadToBooked(bookingData = {}) {
       }
 
       console.log(`✅ Successfully updated lead ${existingLead.id} to Booked!`);
+      broadcastLeadChange({
+        id: existingLead.id,
+        action: "booked",
+        leadType: "Booked",
+        garage: garageAssigned,
+        bookingDate: bookingYmd,
+        bookingType,
+        carBrand: existingLead.car_brand,
+        carModel: existingLead.car_model,
+        customerName: existingLead.customer_name,
+      });
       return {
         success: true,
         leadId: existingLead.id,
@@ -524,6 +535,17 @@ export async function updateLeadToBooked(bookingData = {}) {
       }
 
       console.log(`✅ Successfully created new Booked lead ${newLeadId}!`);
+      broadcastLeadChange({
+        id: newLeadId,
+        action: "booked",
+        leadType: "Booked",
+        garage: garageAssigned,
+        bookingDate: bookingYmd,
+        bookingType,
+        carBrand: extractedBrand,
+        carModel: extractedModel,
+        customerName: newLead.customer_name,
+      });
       return {
         success: true,
         leadId: newLeadId,

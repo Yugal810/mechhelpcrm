@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import type { Lead, SujalCallListItem } from '../types';
 import { LeadService, CallListService, migrateLocalDataToSupabase, SettlementService } from '../utils/dataLayer';
 import { supabase } from '../lib/supabase';
-import { playNewLeadSound } from '../utils/soundService';
+import { playNewLeadSound, playBookingSound } from '../utils/soundService';
 import { ToastNotificationContainer, type ToastData } from '../components/ToastNotification';
 
 interface LeadContextType {
@@ -46,6 +46,8 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isEditingLead, setIsEditingLead] = useState(false);
 
   const knownLeadIdsRef = useRef<Set<string>>(new Set());
+  const knownBookedLeadIdsRef = useRef<Set<string>>(new Set());
+  const notifiedLeadIdsRef = useRef<Set<string>>(new Set());
   const initialLoadDoneRef = useRef(false);
   const [toasts, setToasts] = useState<ToastData[]>([]);
 
@@ -58,6 +60,19 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setToasts(prev => prev.filter(t => t.id !== id));
   }, []);
 
+  const isRecentlyCreatedOrUpdated = (lead: Lead): boolean => {
+    const times = [
+      lead.createdDate ? new Date(lead.createdDate).getTime() : 0,
+      lead.lastContactedDate ? new Date(lead.lastContactedDate).getTime() : 0,
+      (lead as any).updated_at ? new Date((lead as any).updated_at).getTime() : 0,
+    ].filter(t => !isNaN(t) && t > 0);
+
+    if (times.length === 0) return false;
+    const latestTime = Math.max(...times);
+    // Must be within the last 3 minutes (180,000 ms)
+    return Date.now() - latestTime < 180000;
+  };
+
   const fetchAllData = useCallback(async (isSilent = false) => {
     try {
       if (!isSilent) setIsLoading(true);
@@ -68,12 +83,42 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
       ]);
 
       if (initialLoadDoneRef.current) {
-        // Detect newly added leads
-        const newlyAdded = fetchedLeads.filter(l => !knownLeadIdsRef.current.has(l.id));
+        // 1. Detect Newly Confirmed Bookings (either newly inserted or transitioned to Booked)
+        const newlyBooked = fetchedLeads.filter(
+          l => l.leadType === 'Booked' &&
+               !knownBookedLeadIdsRef.current.has(l.id) &&
+               !notifiedLeadIdsRef.current.has(`${l.id}-booked`) &&
+               isRecentlyCreatedOrUpdated(l)
+        );
+
+        if (newlyBooked.length > 0) {
+          console.log('🚗 Newly confirmed booking:', newlyBooked);
+          playBookingSound();
+          newlyBooked.forEach(lead => {
+            notifiedLeadIdsRef.current.add(`${lead.id}-booked`);
+            knownBookedLeadIdsRef.current.add(lead.id);
+            addToast({
+              type: 'success',
+              title: '🚗 Booking Confirmed!',
+              message: `${lead.customerName || 'Customer'} • ${lead.garageAssigned || 'Partner Garage'} (${lead.bookingType || 'Visit'})`.trim(),
+              duration: 6000,
+            });
+          });
+        }
+
+        // 2. Detect Brand New Fresh Leads (non-booked)
+        const newlyAdded = fetchedLeads.filter(
+          l => l.leadType !== 'Booked' &&
+               !knownLeadIdsRef.current.has(l.id) &&
+               !notifiedLeadIdsRef.current.has(l.id) &&
+               isRecentlyCreatedOrUpdated(l)
+        );
+
         if (newlyAdded.length > 0) {
-          console.log('🔔 New lead received:', newlyAdded);
+          console.log('🔔 Truly new incoming fresh lead:', newlyAdded);
           playNewLeadSound();
           newlyAdded.forEach(lead => {
+            notifiedLeadIdsRef.current.add(lead.id);
             addToast({
               type: 'success',
               title: '🔔 New Lead Received!',
@@ -84,6 +129,14 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       } else {
         initialLoadDoneRef.current = true;
+        // Seed all existing historical leads so they never trigger a notification
+        fetchedLeads.forEach(l => {
+          notifiedLeadIdsRef.current.add(l.id);
+          if (l.leadType === 'Booked') {
+            knownBookedLeadIdsRef.current.add(l.id);
+            notifiedLeadIdsRef.current.add(`${l.id}-booked`);
+          }
+        });
       }
 
       knownLeadIdsRef.current = new Set(fetchedLeads.map(l => l.id));
@@ -127,7 +180,7 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (useSupabase && supabase?.channel) {
       try {
         channel = supabase
-          .channel(`crm-realtime-leads-${Date.now()}`)
+          .channel('crm-realtime-leads')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => {
             if (mounted) fetchAllData(true);
           })
