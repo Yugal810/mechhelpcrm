@@ -90,9 +90,7 @@ export async function createOrUpdateLeadFromSearch(data = {}) {
   } = data;
 
   const tag = (customerPhone || "").trim();
-  const cleanName = (customerName || "").trim();
-  const hasRealName = cleanName && cleanName !== "~";
-  const name = hasRealName ? cleanName : (tag ? `Customer ${tag}` : "Customer");
+  const name = (customerName || "").trim() || (tag ? `Customer ${tag}` : "Customer");
 
   // Determine car brand and model (without year in model name)
   let carBrand = car?.brand || "";
@@ -123,22 +121,12 @@ export async function createOrUpdateLeadFromSearch(data = {}) {
 
   try {
     if (tag) {
-      // Check if lead already exists for this SalesIQ tag (supporting both with and without 91 country code)
-      const cleanDigits = tag.replace(/[^0-9]/g, "");
-      const searchTags = [tag];
-      if (cleanDigits.length === 10) {
-        searchTags.push(`91${cleanDigits}`);
-      } else if (cleanDigits.length === 12 && cleanDigits.startsWith("91")) {
-        searchTags.push(cleanDigits.substring(2));
-      }
-
+      // Check if lead already exists for this SalesIQ tag
       const { data: existingLead, error: findError } = await supabase
         .from("leads")
-        .select("id, customer_name, car_brand, car_model, fuel_type, custom_year")
-        .in("identifier", searchTags)
+        .select("id")
+        .eq("identifier", tag)
         .eq("lead_source", "SalesIQ")
-        .order("created_date", { ascending: false })
-        .limit(1)
         .maybeSingle();
 
       if (findError) {
@@ -149,18 +137,13 @@ export async function createOrUpdateLeadFromSearch(data = {}) {
         console.log(`📝 Updating existing lead ${existingLead.id} for SalesIQ tag: ${tag}`);
 
         const updatePayload = {
+          customer_name: name,
           next_follow_up_date: nextFollowUpDate,
           priority: isVip ? "High" : "Medium",
           is_vip: isVip,
           number_plate: null, // No number plate inserted from referral
           last_contacted_date: createdDate,
         };
-
-        if (hasRealName) {
-          updatePayload.customer_name = cleanName;
-        } else if (!existingLead.customer_name || existingLead.customer_name === "~") {
-          updatePayload.customer_name = name;
-        }
 
         if (carBrand) updatePayload.car_brand = carBrand;
         if (carModel) updatePayload.car_model = carModel;
@@ -424,18 +407,10 @@ export async function updateLeadToBooked(bookingData = {}) {
   try {
     let existingLead = null;
     if (tag) {
-      const cleanDigits = tag.replace(/[^0-9]/g, "");
-      const searchTags = [tag];
-      if (cleanDigits.length === 10) {
-        searchTags.push(`91${cleanDigits}`);
-      } else if (cleanDigits.length === 12 && cleanDigits.startsWith("91")) {
-        searchTags.push(cleanDigits.substring(2));
-      }
-
       const { data: leadMatch } = await supabase
         .from("leads")
         .select("*")
-        .in("identifier", searchTags)
+        .eq("identifier", tag)
         .eq("lead_source", "SalesIQ")
         .order("created_date", { ascending: false })
         .limit(1)
