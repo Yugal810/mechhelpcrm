@@ -1,7 +1,9 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import type { Lead, SujalCallListItem } from '../types';
 import { LeadService, CallListService, migrateLocalDataToSupabase, SettlementService } from '../utils/dataLayer';
 import { supabase } from '../lib/supabase';
+import { playNewLeadSound } from '../utils/soundService';
+import { ToastNotificationContainer, type ToastData } from '../components/ToastNotification';
 
 interface LeadContextType {
   leads: Lead[];
@@ -43,23 +45,60 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isMigrating, setIsMigrating] = useState(false);
   const [isEditingLead, setIsEditingLead] = useState(false);
 
-  const fetchAllData = useCallback(async () => {
+  const knownLeadIdsRef = useRef<Set<string>>(new Set());
+  const initialLoadDoneRef = useRef(false);
+  const [toasts, setToasts] = useState<ToastData[]>([]);
+
+  const addToast = useCallback((toast: Omit<ToastData, 'id'>) => {
+    const id = `toast-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
+    setToasts(prev => [...prev, { ...toast, id }]);
+  }, []);
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts(prev => prev.filter(t => t.id !== id));
+  }, []);
+
+  const fetchAllData = useCallback(async (isSilent = false) => {
     try {
+      if (!isSilent) setIsLoading(true);
       await CallListService.rolloverPendingItems();
       const [fetchedLeads, fetchedCallList] = await Promise.all([
         LeadService.getLeads(),
         CallListService.getItems()
       ]);
+
+      if (initialLoadDoneRef.current) {
+        // Detect newly added leads
+        const newlyAdded = fetchedLeads.filter(l => !knownLeadIdsRef.current.has(l.id));
+        if (newlyAdded.length > 0) {
+          console.log('🔔 New lead received:', newlyAdded);
+          playNewLeadSound();
+          newlyAdded.forEach(lead => {
+            addToast({
+              type: 'success',
+              title: '🔔 New Lead Received!',
+              message: `${lead.customerName || 'New Customer'} • ${lead.carBrand || ''} ${lead.carModel || ''}`.trim(),
+              duration: 5000,
+            });
+          });
+        }
+      } else {
+        initialLoadDoneRef.current = true;
+      }
+
+      knownLeadIdsRef.current = new Set(fetchedLeads.map(l => l.id));
       setLeads(fetchedLeads);
       setSujalList(fetchedCallList);
     } catch (error) {
       console.error('Failed to fetch data', error);
     } finally {
-      setIsLoading(false);
+      if (!isSilent) setIsLoading(false);
     }
-  }, []);
+  }, [addToast]);
 
   useEffect(() => {
+    let mounted = true;
+
     const initialize = async () => {
       setIsLoading(true);
       
@@ -72,28 +111,58 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
           } catch (e) {
             console.error("Migration failed", e);
           }
-          setIsMigrating(false);
+          if (mounted) setIsMigrating(false);
         }
       }
       
-      await fetchAllData();
-      
-      if (useSupabase) {
-        const channel = supabase
-          .channel(`schema-db-changes-${Date.now()}`)
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => fetchAllData())
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'call_list_items' }, () => fetchAllData())
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_history' }, () => fetchAllData())
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_history' }, () => fetchAllData())
-          .subscribe();
-
-        return () => {
-          supabase.removeChannel(channel);
-        };
+      if (mounted) {
+        await fetchAllData(false);
       }
     };
 
     initialize();
+
+    // 1. Supabase Realtime Channel
+    let channel: any = null;
+    if (useSupabase && supabase?.channel) {
+      try {
+        channel = supabase
+          .channel(`crm-realtime-leads-${Date.now()}`)
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'leads' }, () => {
+            if (mounted) fetchAllData(true);
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'call_list_items' }, () => {
+            if (mounted) fetchAllData(true);
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'booking_history' }, () => {
+            if (mounted) fetchAllData(true);
+          })
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'activity_history' }, () => {
+            if (mounted) fetchAllData(true);
+          })
+          .on('broadcast', { event: 'new_lead' }, () => {
+            if (mounted) fetchAllData(true);
+          })
+          .subscribe();
+      } catch (err) {
+        console.warn('Realtime channel subscription error:', err);
+      }
+    }
+
+    // 2. High-reliability polling fallback every 3.5 seconds (zero-flicker background sync)
+    const pollInterval = setInterval(() => {
+      if (mounted) {
+        fetchAllData(true);
+      }
+    }, 3500);
+
+    return () => {
+      mounted = false;
+      clearInterval(pollInterval);
+      if (channel && supabase?.removeChannel) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, [fetchAllData]);
 
   const addLead = async (leadData: Omit<Lead, 'id' | 'createdDate' | 'bookingHistory' | 'activityHistory'>) => {
@@ -228,6 +297,7 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
   return (
     <LeadContext.Provider value={{ leads, sujalList, addLead, updateLead, deleteLead, addSujalItem, updateSujalItem, deleteSujalItem, finalizeBilling, finalizeDirectBilling, getGarageList, addGarage, removeGarage, recordPayment, getGaragesWithBalances, getGarageSettlements, getAllSettlements, getHistorySettlements, markFinalSettlement, deleteSettlement, updateSettlementBilling, settleGarage, isLoading, isMigrating, isEditingLead, setIsEditingLead }}>
       {children}
+      <ToastNotificationContainer toasts={toasts} onDismiss={dismissToast} />
     </LeadContext.Provider>
   );
 };

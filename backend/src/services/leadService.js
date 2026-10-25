@@ -56,6 +56,30 @@ export function getTomorrowYmd() {
   return `${year}-${month}-${day}`;
 }
 
+export function broadcastLeadChange(payload = {}) {
+  try {
+    const channel = supabase.channel("crm-realtime-broadcast");
+    channel.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        channel
+          .send({
+            type: "broadcast",
+            event: "new_lead",
+            payload,
+          })
+          .then(() => {
+            setTimeout(() => {
+              supabase.removeChannel(channel);
+            }, 2000);
+          })
+          .catch(() => {});
+      }
+    });
+  } catch (e) {
+    // Non-blocking
+  }
+}
+
 export async function createOrUpdateLeadFromSearch(data = {}) {
   const {
     customerName,
@@ -139,6 +163,7 @@ export async function createOrUpdateLeadFromSearch(data = {}) {
           console.error("⚠️ Failed to update existing lead:", updateError.message);
         } else {
           console.log(`✅ Successfully updated lead ${existingLead.id}`);
+          broadcastLeadChange({ id: existingLead.id, name, identifier: tag, carBrand, carModel, action: "updated" });
         }
 
         if (effectiveFuelType && (tag || existingLead.id)) {
@@ -223,6 +248,7 @@ export async function createOrUpdateLeadFromSearch(data = {}) {
     }
 
     console.log(`✅ Successfully created new lead ${newLeadId} for customer "${name}" (${identifier})`);
+    broadcastLeadChange({ id: newLeadId, name, identifier, carBrand, carModel, action: "created" });
     return { success: true, leadId: newLeadId, action: "created" };
   } catch (err) {
     console.error("⚠️ Exception in createOrUpdateLeadFromSearch:", err.message);
