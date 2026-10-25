@@ -219,18 +219,17 @@ export async function createOrUpdateLeadFromSearch(data = {}) {
 
 export function parseBookingDate(rawDate) {
   if (!rawDate) return new Date().toISOString().split("T")[0];
-  const s = String(rawDate).trim().toLowerCase().replace(/[\{\}\$]/g, "");
+  const s = String(rawDate).trim().toLowerCase();
   const now = new Date();
 
-  // 1. Check for relative day keywords anywhere in string (e.g. "Today at 12:00 PM-2.00", "Tomorrow at...")
-  if (/\btoday\b/i.test(s)) {
+  if (s === "today") {
     const yyyy = now.getFullYear();
     const mm = String(now.getMonth() + 1).padStart(2, "0");
     const dd = String(now.getDate()).padStart(2, "0");
     return `${yyyy}-${mm}-${dd}`;
   }
 
-  if (/\btomorrow\b/i.test(s)) {
+  if (s === "tomorrow") {
     const tmrw = new Date(now);
     tmrw.setDate(tmrw.getDate() + 1);
     const yyyy = tmrw.getFullYear();
@@ -239,8 +238,29 @@ export function parseBookingDate(rawDate) {
     return `${yyyy}-${mm}-${dd}`;
   }
 
-  // 2. Check 4-digit year format: YYYY-MM-DD or YYYY/MM/DD anywhere in string
-  const ymdMatch = s.match(/\b(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})\b/);
+  // Check DD-MM-YYYY or DD/MM/YYYY or DD.MM.YYYY
+  const dmyMatch = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2,4})$/);
+  if (dmyMatch) {
+    const dd = String(parseInt(dmyMatch[1], 10)).padStart(2, "0");
+    const mm = String(parseInt(dmyMatch[2], 10)).padStart(2, "0");
+    let yyyy = dmyMatch[3];
+    if (yyyy.length === 2) {
+      yyyy = "20" + yyyy;
+    }
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // Check DD-MM or DD/MM
+  const dmMatch = s.match(/^(\d{1,2})[\/\-\.](\d{1,2})$/);
+  if (dmMatch) {
+    const dd = String(parseInt(dmMatch[1], 10)).padStart(2, "0");
+    const mm = String(parseInt(dmMatch[2], 10)).padStart(2, "0");
+    const yyyy = now.getFullYear();
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  // Check YYYY-MM-DD
+  const ymdMatch = s.match(/^(\d{4})[\/\-\.](\d{1,2})[\/\-\.](\d{1,2})$/);
   if (ymdMatch) {
     const yyyy = ymdMatch[1];
     const mm = String(parseInt(ymdMatch[2], 10)).padStart(2, "0");
@@ -248,57 +268,12 @@ export function parseBookingDate(rawDate) {
     return `${yyyy}-${mm}-${dd}`;
   }
 
-  // 3. Check full DD-MM-YYYY or DD/MM/YYYY anywhere in string
-  const dmyFullMatch = s.match(/\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{4})\b/);
-  if (dmyFullMatch) {
-    const dd = String(parseInt(dmyFullMatch[1], 10)).padStart(2, "0");
-    const mm = String(parseInt(dmyFullMatch[2], 10)).padStart(2, "0");
-    const yyyy = dmyFullMatch[3];
-    return `${yyyy}-${mm}-${dd}`;
-  }
-
-  // 4. Check DD-MM-YY or DD/MM/YY (2-digit year, e.g. 26-11-26 or 26/11/26) anywhere in string
-  const dmyShortMatch = s.match(/\b(\d{1,2})[\/\-\.](\d{1,2})[\/\-\.](\d{2})\b/);
-  if (dmyShortMatch) {
-    const dd = String(parseInt(dmyShortMatch[1], 10)).padStart(2, "0");
-    const mm = String(parseInt(dmyShortMatch[2], 10)).padStart(2, "0");
-    const yyyy = `20${dmyShortMatch[3]}`;
-    return `${yyyy}-${mm}-${dd}`;
-  }
-
-  // 5. Check DD-MM or DD/MM (no year, e.g. 5/11, 26-11, 28/11) anywhere in string
-  const dmMatch = s.match(/\b(\d{1,2})[\/\-\.](\d{1,2})\b/);
-  if (dmMatch) {
-    const dd = String(parseInt(dmMatch[1], 10)).padStart(2, "0");
-    const mm = String(parseInt(dmMatch[2], 10)).padStart(2, "0");
-    let yyyy = now.getFullYear();
-    if (parseInt(mm, 10) < (now.getMonth() + 1) - 6) {
-      yyyy += 1;
-    }
-    return `${yyyy}-${mm}-${dd}`;
-  }
-
-  // 6. Native parse fallback
   const parsed = new Date(rawDate);
   if (!isNaN(parsed.getTime())) {
     return parsed.toISOString().split("T")[0];
   }
 
   return now.toISOString().split("T")[0];
-}
-
-export function parseBookingTimeSlot(rawDate) {
-  if (!rawDate) return "";
-  const s = String(rawDate).trim();
-  const afterAt = s.match(/(?:at\s+)+(.+)$/i);
-  if (afterAt && afterAt[1]) {
-    return afterAt[1].trim();
-  }
-  const timeMatch = s.match(/(\d{1,2}(?::\d{2}|\.\d{2})?\s*(?:am|pm)\s*[-–—to]?\s*(?:\d{1,2}(?::\d{2}|\.\d{2})?\s*(?:am|pm)?)?|\d{1,2}:\d{2}\s*[-–—to]?\s*\d{1,2}:\d{2})/i);
-  if (timeMatch) {
-    return timeMatch[0].trim();
-  }
-  return "";
 }
 
 export function parseBookingMode(rawMode) {
@@ -372,7 +347,6 @@ export async function updateLeadToBooked(bookingData = {}) {
 
   const rawDate = date || C4 || c4 || "";
   const bookingYmd = parseBookingDate(rawDate);
-  const slot = parseBookingTimeSlot(rawDate);
   const bookingDateTime = `${bookingYmd}T00:00:00.000Z`;
 
   const rawMode = Mode || mode || "";
@@ -399,10 +373,7 @@ export async function updateLeadToBooked(bookingData = {}) {
     }
   }
 
-  let { notes, extractedBrand, extractedModel, extractedFuel } = parsePlanText(plan || selectedPlan || "");
-  if (slot) {
-    notes = notes ? `${notes}\nSlot - *${slot}*` : `Slot - *${slot}*`;
-  }
+  const { notes, extractedBrand, extractedModel, extractedFuel } = parsePlanText(plan || selectedPlan || "");
 
   try {
     let existingLead = null;
@@ -468,7 +439,6 @@ export async function updateLeadToBooked(bookingData = {}) {
         success: true,
         leadId: existingLead.id,
         bookingDate: bookingYmd,
-        slot,
         bookingType,
         garageAssigned,
         notes,
@@ -527,7 +497,6 @@ export async function updateLeadToBooked(bookingData = {}) {
         success: true,
         leadId: newLeadId,
         bookingDate: bookingYmd,
-        slot,
         bookingType,
         garageAssigned,
         notes,

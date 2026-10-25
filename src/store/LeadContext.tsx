@@ -47,7 +47,6 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const knownLeadIdsRef = useRef<Set<string>>(new Set());
   const notifiedIdsRef = useRef<Set<string>>(new Set());
-  const leadSignaturesRef = useRef<Map<string, string>>(new Map());
   const initialLoadDoneRef = useRef(false);
   const [toasts, setToasts] = useState<ToastData[]>([]);
 
@@ -83,9 +82,6 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       knownLeadIdsRef.current = new Set(fetchedLeads.map(l => l.id));
-      fetchedLeads.forEach(l => {
-        leadSignaturesRef.current.set(l.id, `${l.carBrand || ''}|${l.carModel || ''}|${l.fuelType || ''}|${l.customYear || ''}|${l.leadType || ''}`);
-      });
       setLeads(fetchedLeads);
       setSujalList(fetchedCallList);
     } catch (error) {
@@ -147,29 +143,28 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
               const notifKey = `${payload.id}-${isBooking ? 'booked' : 'lead'}`;
 
               // Bulletproof single-notification check: only notify once per session
-              if (!notifiedIdsRef.current.has(notifKey)) {
-                notifiedIdsRef.current.add(notifKey);
-
-                if (isBooking) {
-                  playBookingSound();
-                  addToast({
-                    type: 'success',
-                    title: '🚗 Booking Confirmed!',
-                    message: `${payload.customerName || payload.name || 'Customer'} • ${payload.garage || 'Partner Garage'} (${payload.bookingType || 'Visit'})`.trim(),
-                    duration: 6000,
-                  });
-                } else if (payload.action !== 'updated') {
-                  playNewLeadSound();
-                  addToast({
-                    type: 'success',
-                    title: '🔔 New Lead Received!',
-                    message: `${payload.name || payload.customerName || 'New Customer'} • ${payload.carBrand || ''} ${payload.carModel || ''}`.trim(),
-                    duration: 5000,
-                  });
-                }
+              if (notifiedIdsRef.current.has(notifKey)) {
+                return;
               }
+              notifiedIdsRef.current.add(notifKey);
 
-              // ALWAYS refresh data when a broadcast arrives so any added info (car brand, model, fuel, year) updates immediately on screen!
+              if (isBooking) {
+                playBookingSound();
+                addToast({
+                  type: 'success',
+                  title: '🚗 Booking Confirmed!',
+                  message: `${payload.customerName || payload.name || 'Customer'} • ${payload.garage || 'Partner Garage'} (${payload.bookingType || 'Visit'})`.trim(),
+                  duration: 6000,
+                });
+              } else {
+                playNewLeadSound();
+                addToast({
+                  type: 'success',
+                  title: '🔔 New Lead Received!',
+                  message: `${payload.name || payload.customerName || 'New Customer'} • ${payload.carBrand || ''} ${payload.carModel || ''}`.trim(),
+                  duration: 5000,
+                });
+              }
               fetchAllData(true);
             }
           })
@@ -185,7 +180,7 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const { data: latestRows, error } = await supabase
           .from('leads')
-          .select('id, customer_name, car_brand, car_model, fuel_type, custom_year, lead_type, created_date, last_contacted_date, garage_assigned, booking_type')
+          .select('id, customer_name, car_brand, car_model, lead_type, created_date, last_contacted_date, garage_assigned, booking_type')
           .order('created_date', { ascending: false })
           .limit(5);
 
@@ -194,51 +189,44 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
         let needsFullRefresh = false;
         latestRows.forEach((row: any) => {
           if (!row || !row.id) return;
-
-          // Check if lead data changed (e.g. car brand, model, fuel, or year added via AiSensy)
-          const currentSig = `${row.car_brand || ''}|${row.car_model || ''}|${row.fuel_type || ''}|${row.custom_year || ''}|${row.lead_type || ''}`;
-          const prevSig = leadSignaturesRef.current.get(row.id);
-          if (prevSig !== undefined && prevSig !== currentSig) {
-            leadSignaturesRef.current.set(row.id, currentSig);
-            needsFullRefresh = true;
-          }
-
           const isBooking = row.lead_type === 'Booked';
           const notifKey = `${row.id}-${isBooking ? 'booked' : 'lead'}`;
 
-          // Already notified in this session? Skip sound/toast!
-          if (!notifiedIdsRef.current.has(notifKey)) {
-            // Check if created or updated recently (within last 3 minutes)
-            const createdMs = row.created_date ? new Date(row.created_date).getTime() : 0;
-            const contactedMs = row.last_contacted_date ? new Date(row.last_contacted_date).getTime() : 0;
-            const isRecentlyCreated = createdMs > 0 && (Date.now() - createdMs < 180000);
-            const isRecentlyContacted = contactedMs > 0 && (Date.now() - contactedMs < 180000);
-            const isRelevant = isBooking ? (isRecentlyCreated || isRecentlyContacted) : isRecentlyCreated;
+          // Already notified in this session? Skip permanently!
+          if (notifiedIdsRef.current.has(notifKey)) {
+            return;
+          }
 
-            if (isRelevant) {
-              // Mark permanently as notified so it NEVER rings again
-              notifiedIdsRef.current.add(notifKey);
-              needsFullRefresh = true;
+          // Check if created or updated recently (within last 3 minutes)
+          const createdMs = row.created_date ? new Date(row.created_date).getTime() : 0;
+          const contactedMs = row.last_contacted_date ? new Date(row.last_contacted_date).getTime() : 0;
+          const isRecentlyCreated = createdMs > 0 && (Date.now() - createdMs < 180000);
+          const isRecentlyContacted = contactedMs > 0 && (Date.now() - contactedMs < 180000);
+          const isRelevant = isBooking ? (isRecentlyCreated || isRecentlyContacted) : isRecentlyCreated;
 
-              if (isBooking) {
-                console.log('🚗 Newly confirmed booking detected from poll:', row);
-                playBookingSound();
-                addToast({
-                  type: 'success',
-                  title: '🚗 Booking Confirmed!',
-                  message: `${row.customer_name || 'Customer'} • ${row.garage_assigned || 'Partner Garage'} (${row.booking_type || 'Visit'})`.trim(),
-                  duration: 6000,
-                });
-              } else {
-                console.log('🔔 New lead detected from poll:', row);
-                playNewLeadSound();
-                addToast({
-                  type: 'success',
-                  title: '🔔 New Lead Received!',
-                  message: `${row.customer_name || 'New Customer'} • ${row.car_brand || ''} ${row.car_model || ''}`.trim(),
-                  duration: 5000,
-                });
-              }
+          if (isRelevant) {
+            // Mark permanently as notified so it NEVER rings again
+            notifiedIdsRef.current.add(notifKey);
+            needsFullRefresh = true;
+
+            if (isBooking) {
+              console.log('🚗 Newly confirmed booking detected from poll:', row);
+              playBookingSound();
+              addToast({
+                type: 'success',
+                title: '🚗 Booking Confirmed!',
+                message: `${row.customer_name || 'Customer'} • ${row.garage_assigned || 'Partner Garage'} (${row.booking_type || 'Visit'})`.trim(),
+                duration: 6000,
+              });
+            } else {
+              console.log('🔔 New lead detected from poll:', row);
+              playNewLeadSound();
+              addToast({
+                type: 'success',
+                title: '🔔 New Lead Received!',
+                message: `${row.customer_name || 'New Customer'} • ${row.car_brand || ''} ${row.car_model || ''}`.trim(),
+                duration: 5000,
+              });
             }
           }
         });
