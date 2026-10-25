@@ -1,7 +1,19 @@
 {
   "rewrites": [
     {
+      "source": "/api/cars",
+      "destination": "/api/toolApi"
+    },
+    {
       "source": "/api/cars/(.*)",
+      "destination": "/api/toolApi"
+    },
+    {
+      "source": "/api/garages",
+      "destination": "/api/toolApi"
+    },
+    {
+      "source": "/api/garages/(.*)",
       "destination": "/api/toolApi"
     },
     {

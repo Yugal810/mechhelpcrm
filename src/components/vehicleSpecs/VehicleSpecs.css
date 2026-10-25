@@ -1124,6 +1124,27 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
+.vehicle-specs-wrapper .status-pill {
+  display: inline-block;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  line-height: 1.2;
+}
+
+.vehicle-specs-wrapper .status-pill.active {
+  background: #dcfce7;
+  color: #15803d;
+  border: 1px solid #bbf7d0;
+}
+
+.vehicle-specs-wrapper .status-pill.inactive {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+}
+
 @keyframes slide-up {
   from { opacity: 0; transform: translateY(36px); }
   to { opacity: 1; transform: translateY(0); }

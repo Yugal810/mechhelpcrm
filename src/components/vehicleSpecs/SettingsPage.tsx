@@ -32,37 +32,16 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
     try {
       setLoading(true);
       const data = await fetchGarages();
-      if (Array.isArray(data) && data.length > 0) {
+      if (Array.isArray(data)) {
         setGarages(data);
         setError(null);
-        return;
+      } else {
+        setGarages([]);
       }
-      throw new Error("No garages returned from API");
-    } catch (err) {
-      console.warn("Primary API fetch failed, falling back to database records:", err);
-      try {
-        const { supabase } = await import("../../lib/supabase");
-        const { data: supaGarages } = await supabase.from("garages").select("*");
-        if (supaGarages && supaGarages.length > 0) {
-          setGarages(
-            supaGarages.map((g: any) => ({
-              id: g.id,
-              garage_name: g.name,
-              address: "—",
-              contact: "—",
-              lat: 21.1458,
-              lon: 79.0882,
-              enabled: g.is_active !== false,
-            }))
-          );
-          setError(null);
-          return;
-        }
-      } catch (fallbackErr) {
-        console.error("Fallback garage loading error:", fallbackErr);
-      }
+    } catch (err: any) {
+      console.error("Failed to load partner garages from MongoDB:", err);
       setGarages([]);
-      setError("Could not load partner garages from database.");
+      setError("Could not load partner garages from MongoDB database.");
     } finally {
       setLoading(false);
     }
@@ -286,14 +265,16 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({ onBack }) => {
                           </label>
                         </td>
                         <td>
-                          <strong className="garage-title-text">{name}</strong>
-                          <span
-                            className={`status-pill ${
-                              isEnabled ? "active" : "inactive"
-                            }`}
-                          >
-                            {isEnabled ? "Active in Search" : "Disabled"}
-                          </span>
+                          <div style={{ display: "flex", flexDirection: "column", gap: "4px", alignItems: "flex-start" }}>
+                            <strong className="garage-title-text">{name}</strong>
+                            <span
+                              className={`status-pill ${
+                                isEnabled ? "active" : "inactive"
+                              }`}
+                            >
+                              {isEnabled ? "Active in Search" : "Disabled"}
+                            </span>
+                          </div>
                         </td>
                         <td className="text-muted">{addr}</td>
                         <td className="text-muted">{cont}</td>
