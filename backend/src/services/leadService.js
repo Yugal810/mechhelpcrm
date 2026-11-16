@@ -9,14 +9,18 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, "../../../.env") });
 dotenv.config({ path: path.resolve(__dirname, "../../.env") });
 
+function normalizeSupabaseUrl(rawUrl) {
+  return String(rawUrl || "").trim().replace(/\/rest\/v1\/?$/i, "").replace(/\/+$/, "");
+}
+
 const supabaseUrl =
-  process.env.VITE_SUPABASE_URL ||
-  process.env.SUPABASE_URL ||
+  normalizeSupabaseUrl(process.env.VITE_SUPABASE_URL) ||
+  normalizeSupabaseUrl(process.env.SUPABASE_URL) ||
   "https://odwsohmlwukrkacvqfso.supabase.co";
 const supabaseKey =
-  process.env.VITE_SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_ANON_KEY ||
-  process.env.SUPABASE_SERVICE_ROLE_KEY ||
+  process.env.SUPABASE_SERVICE_ROLE_KEY?.trim() ||
+  process.env.VITE_SUPABASE_ANON_KEY?.trim() ||
+  process.env.SUPABASE_ANON_KEY?.trim() ||
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im9kd3NvaG1sd3VrcmthY3ZxZnNvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODk0NzExNDgsImV4cCI6MjEwNTA0NzE0OH0.lbg_q5wjc5zxpdf30Nhj02t6-ps4KNZ6uLiMR-AxTBM";
 
 const supabase = createClient(supabaseUrl, supabaseKey);
@@ -124,7 +128,7 @@ export async function createOrUpdateLeadFromSearch(data = {}) {
       // Check if lead already exists for this SalesIQ tag
       const { data: existingLead, error: findError } = await supabase
         .from("leads")
-        .select("id")
+        .select("*")
         .eq("identifier", tag)
         .eq("lead_source", "SalesIQ")
         .maybeSingle();
@@ -159,7 +163,15 @@ export async function createOrUpdateLeadFromSearch(data = {}) {
           console.error("⚠️ Failed to update existing lead:", updateError.message);
         } else {
           console.log(`✅ Successfully updated lead ${existingLead.id}`);
-          broadcastLeadChange({ id: existingLead.id, name, identifier: tag, carBrand, carModel, action: "updated" });
+          broadcastLeadChange({
+            id: existingLead.id,
+            name,
+            identifier: tag,
+            carBrand,
+            carModel,
+            assignedTo: existingLead.assigned_to ?? null,
+            action: "updated",
+          });
         }
 
         return { success: true, leadId: existingLead.id, action: "updated" };
@@ -200,7 +212,7 @@ export async function createOrUpdateLeadFromSearch(data = {}) {
     let { data: insertedData, error: insertError } = await supabase
       .from("leads")
       .insert([newLead])
-      .select("id")
+      .select("*")
       .single();
 
     if (insertError) {
@@ -209,8 +221,16 @@ export async function createOrUpdateLeadFromSearch(data = {}) {
     }
 
     console.log(`✅ Successfully created new lead ${newLeadId} for customer "${name}" (${identifier})`);
-    broadcastLeadChange({ id: newLeadId, name, identifier, carBrand, carModel, action: "created" });
-    return { success: true, leadId: newLeadId, action: "created" };
+    broadcastLeadChange({
+      id: newLeadId,
+      name,
+      identifier,
+      carBrand,
+      carModel,
+      assignedTo: insertedData?.assigned_to ?? null,
+      action: "created",
+    });
+    return { success: true, leadId: newLeadId, assignedTo: insertedData?.assigned_to ?? null, action: "created" };
   } catch (err) {
     console.error("⚠️ Exception in createOrUpdateLeadFromSearch:", err.message);
     return { success: false, error: err.message };
@@ -435,6 +455,37 @@ export async function updateLeadToBooked(bookingData = {}) {
         return { success: false, error: updateError.message };
       }
 
+      // Keep any existing Daily Garage Board rows synced with updated booking date/garage
+      try {
+        const { data: dgbRows } = await supabase
+          .from("daily_garage_board_entries")
+          .select("id, created_date, garage_id, notes")
+          .eq("lead_id", existingLead.id);
+
+        if (dgbRows && dgbRows.length > 0) {
+          const targetGarageId = updatePayload.garage_id;
+          await Promise.all(
+            dgbRows.map((row) => {
+              const dateChanged = bookingYmd && row.created_date !== bookingYmd;
+              const garageChanged = targetGarageId && row.garage_id !== targetGarageId;
+              const patch = {
+                created_date: bookingYmd || row.created_date,
+                ...(targetGarageId ? { garage_id: targetGarageId } : {}),
+              };
+              if (dateChanged || garageChanged) {
+                patch.status = "pending";
+                if (typeof row.notes === "string" && row.notes.startsWith("__STATUS_PICKED_UP__")) {
+                  patch.notes = row.notes.replace("__STATUS_PICKED_UP__", "");
+                }
+              }
+              return supabase.from("daily_garage_board_entries").update(patch).eq("id", row.id);
+            })
+          );
+        }
+      } catch (dgbErr) {
+        console.warn("⚠️ Daily Garage Board sync skipped:", dgbErr.message);
+      }
+
       console.log(`✅ Successfully updated lead ${existingLead.id} to Booked!`);
       broadcastLeadChange({
         id: existingLead.id,
@@ -486,7 +537,11 @@ export async function updateLeadToBooked(bookingData = {}) {
         fuel_type: extractedFuel || null,
       };
 
-      let { error: insertError } = await supabase.from("leads").insert([newLead]);
+      let { data: insertedBooked, error: insertError } = await supabase
+        .from("leads")
+        .insert([newLead])
+        .select("*")
+        .single();
 
       if (insertError) {
         console.error("⚠️ Failed to insert new Booked lead:", insertError.message);
@@ -504,6 +559,7 @@ export async function updateLeadToBooked(bookingData = {}) {
         carBrand: extractedBrand,
         carModel: extractedModel,
         customerName: newLead.customer_name,
+        assignedTo: insertedBooked?.assigned_to ?? null,
       });
       return {
         success: true,

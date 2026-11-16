@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import type { Lead, LeadSource, Salesperson, LeadType, BookingType, Priority, ServiceType } from '../../types';
+import type { Lead, LeadSource, LeadType, BookingType, Priority, ServiceType } from '../../types';
 import { CAR_BRANDS, PREMIUM_MODELS } from '../../data/seed';
+import { useAuth } from '../../store/AuthContext';
 import { User, Phone, Car, Calendar, ShieldAlert, CheckCircle, Tag, MessageSquare, Save, Sparkles, Check, RotateCcw } from 'lucide-react';
 import { searchCars, fetchOptions } from './api';
-import { toYmd } from '../../utils/dataLayer';
+import { toYmd, toBoardDateYmd } from '../../utils/dataLayer';
 import './LeadEditPanel.css';
 
 interface LeadEditPanelProps {
@@ -40,6 +41,7 @@ export const LeadEditPanel: React.FC<LeadEditPanelProps> = ({
   selectedPlanInfo,
   targetDate,
 }) => {
+  const { user, isAdmin, salesEmployees, getEmployeeLabel } = useAuth();
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -47,7 +49,7 @@ export const LeadEditPanel: React.FC<LeadEditPanelProps> = ({
   const [createdDate, setCreatedDate] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [leadSource, setLeadSource] = useState<LeadSource>('SalesIQ');
-  const [salesperson, setSalesperson] = useState<Salesperson>('Choice');
+  const [assignedTo, setAssignedTo] = useState<string>('');
   const [identifier, setIdentifier] = useState('');
   const [carBrand, setCarBrand] = useState('');
   const [carModel, setCarModel] = useState('');
@@ -91,7 +93,7 @@ export const LeadEditPanel: React.FC<LeadEditPanelProps> = ({
       setCreatedDate(toYmd(activeLead.createdDate) || new Date().toISOString().split('T')[0]);
       setCustomerName(activeLead.customerName || '');
       setLeadSource(activeLead.leadSource || 'SalesIQ');
-      setSalesperson(activeLead.salesperson || 'Choice');
+      setAssignedTo(activeLead.assignedTo || (!activeLead.id && !isAdmin ? (user?.id || '') : ''));
       setIdentifier(activeLead.identifier || '');
       setCarBrand(activeLead.carBrand || '');
       setCarModel(activeLead.carModel || '');
@@ -129,7 +131,7 @@ export const LeadEditPanel: React.FC<LeadEditPanelProps> = ({
 
       setBookingType(activeLead.bookingType);
       setGarageAssigned(activeLead.garageAssigned || '');
-      setBookingDateTime(toYmd(activeLead.bookingDateTime));
+      setBookingDateTime(toBoardDateYmd(activeLead.bookingDateTime));
       setNotes(activeLead.notes || '');
       setIsVip(activeLead.isVip || false);
       setWhatsappBroadcast(activeLead.whatsappBroadcast || false);
@@ -298,11 +300,23 @@ export const LeadEditPanel: React.FC<LeadEditPanelProps> = ({
     setIsSaving(true);
     setSaveStatus(null);
 
+    const isNewLead = !activeLead.id;
+    const resolvedBookingDateTime = leadType === 'Booked'
+      ? (bookingDateTime
+          ? (bookingDateTime === toBoardDateYmd(activeLead.bookingDateTime) && activeLead.bookingDateTime
+              ? activeLead.bookingDateTime
+              : (bookingDateTime.includes('T') ? bookingDateTime : `${bookingDateTime}T00:00:00.000Z`))
+          : (nextFollowUpDate ? (nextFollowUpDate.includes('T') ? nextFollowUpDate : `${nextFollowUpDate}T00:00:00.000Z`) : new Date().toISOString()))
+      : undefined;
+
     const updatedLead: Lead = {
       ...activeLead,
       customerName,
       leadSource,
-      salesperson,
+      salesperson: activeLead.salesperson || 'Choice',
+      assignedTo: isAdmin
+        ? (assignedTo || null)
+        : (isNewLead ? (user?.id || null) : (activeLead.assignedTo ?? null)),
       identifier,
       carBrand,
       carModel,
@@ -318,9 +332,7 @@ export const LeadEditPanel: React.FC<LeadEditPanelProps> = ({
         : (nextFollowUpDate ? (nextFollowUpDate.includes('T') ? nextFollowUpDate : `${nextFollowUpDate}T00:00:00.000Z`) : ''),
       bookingType: leadType === 'Booked' ? bookingType : undefined,
       garageAssigned: leadType === 'Booked' ? garageAssigned : undefined,
-      bookingDateTime: leadType === 'Booked'
-        ? (bookingDateTime ? (bookingDateTime.includes('T') ? bookingDateTime : `${bookingDateTime}T00:00:00.000Z`) : (nextFollowUpDate ? (nextFollowUpDate.includes('T') ? nextFollowUpDate : `${nextFollowUpDate}T00:00:00.000Z`) : new Date().toISOString()))
-        : undefined,
+      bookingDateTime: resolvedBookingDateTime,
       notes,
       isVip,
       whatsappBroadcast,
@@ -402,17 +414,33 @@ export const LeadEditPanel: React.FC<LeadEditPanelProps> = ({
                 </div>
 
                 <div className="lead-field-group">
-                  <label>Salesperson</label>
-                  <select
-                    className="lead-select"
-                    value={salesperson}
-                    onChange={(e) => setSalesperson(e.target.value as Salesperson)}
-                  >
-                    <option value="Choice">Choice</option>
-                    <option value="Nothing">Nothing</option>
-                    <option value="Tecno">Tecno</option>
-                    <option value="Realme">Realme</option>
-                  </select>
+                  <label>Assigned To</label>
+                  {isAdmin ? (
+                    <select
+                      className="lead-select"
+                      value={assignedTo}
+                      onChange={(e) => setAssignedTo(e.target.value)}
+                    >
+                      <option value="">{activeLead.id ? 'Unassigned' : 'Auto (Round-Robin)'}</option>
+                      {salesEmployees.map((emp) => (
+                        <option key={emp.id} value={emp.id}>
+                          {emp.displayName}
+                        </option>
+                      ))}
+                      {assignedTo && !salesEmployees.some((emp) => emp.id === assignedTo) && (
+                        <option value={assignedTo}>{getEmployeeLabel(assignedTo)}</option>
+                      )}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      className="lead-input"
+                      value={activeLead.id ? getEmployeeLabel(assignedTo) : getEmployeeLabel(user?.id)}
+                      readOnly
+                      disabled
+                      title="Only an admin can reassign leads"
+                    />
+                  )}
                 </div>
               </div>
 
@@ -614,7 +642,8 @@ export const LeadEditPanel: React.FC<LeadEditPanelProps> = ({
                     onChange={(e) => {
                       const newStage = e.target.value as LeadType;
                       setLeadType(newStage);
-                      const todayStr = new Date().toISOString().split('T')[0];
+                      const now = new Date();
+                      const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
                       if (newStage === 'Booked') {
                         setBookingDateTime(todayStr);
                         setNextFollowUpDate(todayStr);

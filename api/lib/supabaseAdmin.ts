@@ -2,7 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import type { DailyQuicksLeadInput } from '../shared/dailyQuicks/types.js';
 
 export function createSupabaseAdmin() {
-  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const rawUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
+  const url = rawUrl?.trim().replace(/\/rest\/v1\/?$/i, '').replace(/\/+$/, '');
 
   // FIX: Never fall back to the anon key for cron jobs — the service role key
   // bypasses RLS and is required so fetchLeadsForSummary returns all rows.

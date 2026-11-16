@@ -282,3 +282,65 @@
   }
 }
 
+/* ─── Sales Team & Round-Robin Section ───────────────── */
+.settings-team-section {
+  padding: 0.25rem 0;
+}
+
+.settings-team-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.settings-team-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--border-light, #e5e7eb);
+  border-radius: var(--radius-md, 8px);
+  background-color: var(--bg-secondary, #f9fafb);
+}
+
+.settings-team-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.settings-team-name {
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--text-primary, #111827);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-team-meta {
+  font-size: 0.75rem;
+  color: var(--text-muted, #6b7280);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.settings-role-select {
+  height: 32px;
+  padding: 0 0.6rem;
+  border: 1px solid var(--border-light, #d1d5db);
+  border-radius: var(--radius-md, 8px);
+  background-color: var(--bg-primary, #ffffff);
+  color: var(--text-primary, #111827);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.settings-role-select:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+}
+

@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useLeadContext } from '../store/LeadContext';
+import { useAuth } from '../store/AuthContext';
 import { AddLeadModal } from '../components/AddLeadModal';
 import { FullPageLeadEdit } from '../components/FullPageLeadEdit';
 import { ServiceTypeBadge } from '../components/ServiceTypeBadge';
@@ -8,16 +9,23 @@ import { LeadNoteButton } from '../components/LeadNoteButton';
 import { Edit, Search, ChevronLeft, ChevronRight } from 'lucide-react';
 import { DeleteConfirmAction } from '../components/DeleteConfirmAction';
 import { isBefore, startOfToday } from 'date-fns';
+import { toBoardDateYmd } from '../utils/dataLayer';
 import type { Lead } from '../types';
 
-export const AllLeads: React.FC = () => {
-  const { leads, deleteLead } = useLeadContext();
+interface AllLeadsProps {
+  mode?: 'all' | 'today';
+}
+
+export const AllLeads: React.FC<AllLeadsProps> = ({ mode = 'all' }) => {
+  const { assignedLeads, deleteLead } = useLeadContext();
+  const { isAdmin, salesEmployees, getEmployeeLabel } = useAuth();
   const [searchParams] = useSearchParams();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStage, setFilterStage] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
   const [filterServiceType, setFilterServiceType] = useState('');
+  const [filterAssignee, setFilterAssignee] = useState('');
   const [specialFilter, setSpecialFilter] = useState('all');
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -28,16 +36,21 @@ export const AllLeads: React.FC = () => {
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
 
   const today = startOfToday();
+  const isTodayMode = mode === 'today';
+  const todayYmd = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
   useEffect(() => {
+    if (isTodayMode) return;
     const urlFilter = searchParams.get('filter');
     if (urlFilter) {
       setSpecialFilter(urlFilter);
     }
-  }, [searchParams]);
+  }, [searchParams, isTodayMode]);
 
   const filteredData = useMemo(() => {
-    let data = leads;
+    let data = isTodayMode
+      ? assignedLeads.filter(l => toBoardDateYmd(l.createdDate) === todayYmd)
+      : assignedLeads;
 
     // Apply special URL filters
     if (specialFilter === 'calls-due-today') {
@@ -57,6 +70,15 @@ export const AllLeads: React.FC = () => {
     // Apply priority filter
     if (filterPriority) {
       data = data.filter(l => l.priority === filterPriority);
+    }
+
+    // Apply assignee filter (Admin only)
+    if (isAdmin && filterAssignee) {
+      if (filterAssignee === 'unassigned') {
+        data = data.filter(l => !l.assignedTo);
+      } else {
+        data = data.filter(l => l.assignedTo === filterAssignee);
+      }
     }
 
     // Apply service type filter
@@ -90,7 +112,7 @@ export const AllLeads: React.FC = () => {
     }
 
     return data;
-  }, [leads, specialFilter, filterStage, filterPriority, filterServiceType, searchTerm, today]);
+  }, [assignedLeads, isTodayMode, todayYmd, specialFilter, filterStage, filterPriority, filterServiceType, filterAssignee, isAdmin, searchTerm, today]);
 
   // Pagination
   const totalPages = Math.max(1, Math.ceil(filteredData.length / itemsPerPage));
@@ -113,8 +135,8 @@ export const AllLeads: React.FC = () => {
     <div className="all-leads animate-fade-in">
       <div className="dashboard-header" style={{ marginBottom: '2rem' }}>
         <div>
-          <h1>Leads Database</h1>
-          <p>Complete directory of all your leads</p>
+          <h1>{isTodayMode ? "Today's Leads" : 'Leads Database'}</h1>
+          <p>{isTodayMode ? 'All leads created today across all stages' : 'Complete directory of all your leads'}</p>
         </div>
       </div>
 
@@ -153,6 +175,16 @@ export const AllLeads: React.FC = () => {
             <option value="Both">Both (Service + Painting)</option>
           </select>
 
+          {isAdmin && (
+            <select className="form-select" style={{ width: 'auto' }} value={filterAssignee} onChange={e => { setFilterAssignee(e.target.value); setCurrentPage(1); }}>
+              <option value="">All Employees</option>
+              <option value="unassigned">Unassigned</option>
+              {salesEmployees.map(emp => (
+                <option key={emp.id} value={emp.id}>{emp.displayName}</option>
+              ))}
+            </select>
+          )}
+
           {specialFilter !== 'all' && (
             <button className="btn btn-secondary btn-sm" onClick={() => { setSpecialFilter('all'); setCurrentPage(1); }}>
               Clear Special Filter
@@ -173,6 +205,7 @@ export const AllLeads: React.FC = () => {
               <th>Identifier (Source)</th>
               <th>Car</th>
               <th>Stage</th>
+              {isAdmin && <th>Assigned To</th>}
               <th>Note</th>
               <th>Next Follow-Up</th>
               <th>Actions</th>
@@ -200,6 +233,11 @@ export const AllLeads: React.FC = () => {
                 <td>{lead.identifier} <br /><small className="text-muted">({lead.leadSource})</small></td>
                 <td>{lead.carBrand} {lead.carModel}</td>
                 <td><span className="badge badge-gray">{lead.leadType}</span></td>
+                {isAdmin && (
+                  <td>
+                    <span className="badge badge-gray">{getEmployeeLabel(lead.assignedTo)}</span>
+                  </td>
+                )}
                 <td><LeadNoteButton lead={lead} /></td>
                 <td>
                   <span className={isBefore(new Date(lead.nextFollowUpDate), today) && !['Booked', 'Completed', 'Lost'].includes(lead.leadType) ? 'text-danger font-bold' : ''}>
@@ -220,7 +258,11 @@ export const AllLeads: React.FC = () => {
               </tr>
             ))}
             {currentData.length === 0 && (
-              <tr><td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '3rem' }}>No leads match your criteria.</td></tr>
+              <tr>
+                <td colSpan={isAdmin ? 8 : 7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '3rem' }}>
+                  {isTodayMode ? 'No leads created today match your criteria.' : 'No leads match your criteria.'}
+                </td>
+              </tr>
             )}
           </tbody>
         </table>

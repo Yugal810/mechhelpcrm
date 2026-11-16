@@ -11,7 +11,14 @@ export function normalizeDateToYmd(d?: string | null): string {
   const trimmed = d.trim();
   if (!trimmed) return '';
   
-  if (/^\d{4}-\d{2}-\d{2}/.test(trimmed)) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed) || /^\d{4}-\d{2}-\d{2}T00:00:00(?:\.000)?(?:Z|\+00:00)?$/i.test(trimmed)) {
+    return trimmed.slice(0, 10);
+  }
+  if (/^\d{4}-\d{2}-\d{2}T/.test(trimmed)) {
+    const parsedIso = new Date(trimmed);
+    if (!isNaN(parsedIso.getTime())) {
+      return toISTDateString(parsedIso);
+    }
     return trimmed.slice(0, 10);
   }
   if (/^\d{1,2}[\/-]\d{1,2}[\/-]\d{4}/.test(trimmed)) {

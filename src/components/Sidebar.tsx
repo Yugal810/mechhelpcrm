@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { 
   LayoutDashboard,
+  CalendarCheck,
   Sun,
   Moon,
   Users, 
@@ -41,6 +42,7 @@ const navSections: NavSection[] = [
     title: 'Overview',
     items: [
       { path: '/', label: 'Dashboard', icon: LayoutDashboard },
+      { path: '/todays-leads', label: "Today's Leads", icon: CalendarCheck },
       { path: '/daily-quicks', label: 'Daily Quicks', icon: Sun },
     ]
   },
@@ -78,7 +80,7 @@ const navSections: NavSection[] = [
 export const Sidebar: React.FC = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
-  const { user, logout } = useAuth();
+  const { user, isAdmin, logout } = useAuth();
 
   // Close mobile drawer on route transition
   useEffect(() => {
@@ -142,8 +144,8 @@ export const Sidebar: React.FC = () => {
                 {(user.email?.[0] || 'A').toUpperCase()}
               </div>
               <div className="sidebar-user-details">
-                <span className="sidebar-user-email">{user.email || 'Admin'}</span>
-                <span className="sidebar-user-badge">Account Settings</span>
+                <span className="sidebar-user-email">{user.email || 'User'}</span>
+                <span className="sidebar-user-badge">{isAdmin ? 'Admin' : 'Sales'} • Settings</span>
               </div>
             </NavLink>
             <button

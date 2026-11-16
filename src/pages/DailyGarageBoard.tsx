@@ -18,7 +18,8 @@ import {
   Type,
   X,
 } from 'lucide-react';
-import { DailyGarageBoardService, SettlementService, toYmd } from '../utils/dataLayer';
+import { DailyGarageBoardService, SettlementService, toBoardDateYmd } from '../utils/dataLayer';
+import { supabase } from '../lib/supabase';
 import { useLeadContext } from '../store/LeadContext';
 import type { DailyGarageEntry, DailyGarageEntryStatus } from '../types';
 import './DailyGarageBoard.css';
@@ -774,10 +775,10 @@ export const DailyGarageBoard: React.FC = () => {
   const bookedLeadEntries: DailyGarageEntry[] = useMemo(() => {
     return leads
       .filter(l => l.leadType === 'Booked' && l.garageAssigned && !deletedLeadIds.has(l.id))
-      .filter(l => toYmd(l.bookingDateTime || l.nextFollowUpDate) === selectedDate)
+      .filter(l => toBoardDateYmd(l.bookingDateTime || l.nextFollowUpDate) === selectedDate)
       .map(l => ({
         id: `lead-dgb-${l.id}`,
-        garageId: l.garageAssigned || '',
+        garageId: l.garageId || l.garageAssigned || '',
         customerName: l.customerName || 'Customer',
         carName: `${l.carBrand || ''} ${l.carModel || ''}`.trim() || 'Vehicle',
         numberPlate: l.numberPlate,
@@ -791,10 +792,50 @@ export const DailyGarageBoard: React.FC = () => {
   }, [leads, selectedDate, deletedLeadIds]);
 
   const combinedEntries = useMemo(() => {
-    const existingLeadIds = new Set(entries.map(e => e.leadId).filter(Boolean));
+    const leadMap = new Map(leads.map(l => [l.id, l]));
+
+    // Keep persisted entries synced with the authoritative Lead date, garage, and active status
+    const syncedEntries = entries.reduce<DailyGarageEntry[]>((acc, entry) => {
+      if (!entry.leadId) {
+        acc.push(entry);
+        return acc;
+      }
+
+      const linkedLead = leadMap.get(entry.leadId);
+      if (!linkedLead) {
+        acc.push(entry);
+        return acc;
+      }
+
+      if (!['Booked', 'Completed'].includes(linkedLead.leadType)) {
+        return acc;
+      }
+
+      const authoritativeDate = toBoardDateYmd(linkedLead.bookingDateTime || linkedLead.nextFollowUpDate);
+      if (authoritativeDate && authoritativeDate !== selectedDate) {
+        return acc;
+      }
+
+      const nextGarageId = linkedLead.garageId || linkedLead.garageAssigned || entry.garageId;
+      const garageChanged = Boolean(nextGarageId && entry.garageId !== nextGarageId);
+      const dateChanged = Boolean(authoritativeDate && entry.createdDate !== authoritativeDate);
+
+      acc.push({
+        ...entry,
+        createdDate: authoritativeDate || entry.createdDate,
+        garageId: nextGarageId,
+        customerName: linkedLead.customerName || entry.customerName,
+        carName: `${linkedLead.carBrand || ''} ${linkedLead.carModel || ''}`.trim() || entry.carName,
+        numberPlate: linkedLead.numberPlate ?? entry.numberPlate,
+        status: (dateChanged || garageChanged) && linkedLead.leadType === 'Booked' ? 'pending' : entry.status,
+      });
+      return acc;
+    }, []);
+
+    const existingLeadIds = new Set(syncedEntries.map(e => e.leadId).filter(Boolean));
     const newFromLeads = bookedLeadEntries.filter(ble => !existingLeadIds.has(ble.leadId));
-    return [...entries, ...newFromLeads];
-  }, [entries, bookedLeadEntries]);
+    return [...syncedEntries, ...newFromLeads];
+  }, [entries, bookedLeadEntries, leads, selectedDate]);
 
   // Load garages once on mount
   useEffect(() => {
@@ -804,22 +845,46 @@ export const DailyGarageBoard: React.FC = () => {
       .finally(() => setLoadingGarages(false));
   }, []);
 
-  // Reload entries whenever date changes
-  const loadEntries = useCallback(async (date: string) => {
-    setLoadingEntries(true);
+  // Reload entries whenever date changes or leads/board entries update
+  const loadEntries = useCallback(async (date: string, silent = false) => {
+    if (!silent) setLoadingEntries(true);
     setError(null);
     try {
       const data = await DailyGarageBoardService.getEntries(date);
       setEntries(data);
     } catch (err: any) {
-      setError(`Failed to load entries: ${err?.message}`);
+      if (!silent) setError(`Failed to load entries: ${err?.message}`);
     } finally {
-      setLoadingEntries(false);
+      if (!silent) setLoadingEntries(false);
     }
   }, []);
 
   useEffect(() => {
     loadEntries(selectedDate);
+  }, [selectedDate, loadEntries]);
+
+  useEffect(() => {
+    loadEntries(selectedDate, true);
+  }, [leads, selectedDate, loadEntries]);
+
+  useEffect(() => {
+    if (!supabase?.channel) return;
+    let channel: any = null;
+    try {
+      channel = supabase
+        .channel(`dgb-entries-${selectedDate}`)
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'daily_garage_board_entries' }, () => {
+          loadEntries(selectedDate, true);
+        })
+        .subscribe();
+    } catch (err) {
+      console.warn('Daily Garage Board realtime subscription error:', err);
+    }
+    return () => {
+      if (channel && supabase?.removeChannel) {
+        supabase.removeChannel(channel);
+      }
+    };
   }, [selectedDate, loadEntries]);
 
   // ─── Handlers ───────────────────────────────────────────────────────────

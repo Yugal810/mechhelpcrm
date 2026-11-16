@@ -643,14 +643,15 @@ p {
 }
 
 .note-btn-empty {
-  background-color: var(--danger-bg);
-  color: var(--danger);
-  border: 1px solid var(--danger);
+  background-color: var(--bg-tertiary);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-light);
 }
 
 .note-btn-empty:hover {
-  background-color: var(--danger);
-  color: #ffffff;
+  background-color: var(--border-light);
+  color: var(--text-primary);
+  border-color: var(--text-secondary);
 }
 
 .note-btn-has-content {

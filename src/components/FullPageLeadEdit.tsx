@@ -36,6 +36,7 @@ const BLANK_LEAD: Lead = {
   customerName: '',
   leadSource: 'SalesIQ',
   salesperson: 'Nothing',
+  assignedTo: null,
   identifier: '',
   carBrand: '',
   carModel: '',

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 
 import { useLeadContext } from '../store/LeadContext';
+import { useAuth } from '../store/AuthContext';
 import type { Lead, SujalCallListItem, SujalStatus } from '../types';
 import { AddLeadModal } from '../components/AddLeadModal';
 import { CallOutcomeModal } from '../components/CallOutcomeModal';
@@ -12,11 +13,12 @@ import { isBefore, startOfToday } from 'date-fns';
 import './SujalList.css';
 
 export const SujalList: React.FC = () => {
-  const { leads, sujalList, addSujalItem, updateSujalItem, deleteSujalItem, deleteLead, isLoading } = useLeadContext();
+  const { leads, assignedLeads, assignedSujalList, addSujalItem, updateSujalItem, deleteSujalItem, deleteLead, isLoading } = useLeadContext();
+  const { isAdmin, getEmployeeLabel } = useAuth();
   const [newTag, setNewTag] = useState('');
   const [newPriority, setNewPriority] = useState('Medium');
   const [deleteErrorId, setDeleteErrorId] = useState<string | null>(null);
-  
+
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedItemForConversion, setSelectedItemForConversion] = useState<SujalCallListItem | null>(null);
   const [selectedLeadForCall, setSelectedLeadForCall] = useState<Lead | null>(null);
@@ -35,12 +37,12 @@ export const SujalList: React.FC = () => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, []);
 
-  // Retarget backlog: EVERY lead with leadType === 'Retarget' across all days & slots
+  // Retarget backlog: EVERY lead with leadType === 'Retarget' across all days & slots (scoped by role)
   const retargetLeads = useMemo(() => {
-    return leads
+    return assignedLeads
       .filter(l => l.leadType === 'Retarget')
       .sort((a, b) => new Date(b.createdDate || 0).getTime() - new Date(a.createdDate || 0).getTime());
-  }, [leads]);
+  }, [assignedLeads]);
 
   const handleEditLead = (lead: Lead) => {
     setEditingLead(lead);
@@ -78,7 +80,7 @@ export const SujalList: React.FC = () => {
   const handleAdd = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTag.trim()) return;
-    
+
     addSujalItem({
       salesIqTag: newTag,
       priority: newPriority as any,
@@ -88,8 +90,8 @@ export const SujalList: React.FC = () => {
   };
 
   const handleSelectOutcome = (item: SujalCallListItem, status: SujalStatus) => {
-    updateSujalItem({ 
-      ...item, 
+    updateSujalItem({
+      ...item,
       status,
     });
 
@@ -121,9 +123,9 @@ export const SujalList: React.FC = () => {
   };
 
   const todayStr = new Date().toISOString().split('T')[0];
-  const activeItems = sujalList.filter(item => 
-    item.dateAdded.startsWith(todayStr) || 
-    item.status === 'Call Not Received' || 
+  const activeItems = assignedSujalList.filter(item =>
+    item.dateAdded.startsWith(todayStr) ||
+    item.status === 'Call Not Received' ||
     item.status === 'Pending'
   );
 
@@ -171,13 +173,14 @@ export const SujalList: React.FC = () => {
                 <th>Car</th>
                 <th>Time Slot</th>
                 <th>Next Follow-Up</th>
+                {isAdmin && <th>Assigned To</th>}
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {retargetLeads.length === 0 && (
                 <tr>
-                  <td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                  <td colSpan={isAdmin ? 7 : 6} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                     No retarget leads in the backlog.
                   </td>
                 </tr>
@@ -212,6 +215,11 @@ export const SujalList: React.FC = () => {
                       {lead.nextFollowUpDate}
                     </span>
                   </td>
+                  {isAdmin && (
+                    <td>
+                      <span className="badge badge-gray">{getEmployeeLabel(lead.assignedTo)}</span>
+                    </td>
+                  )}
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'nowrap' }}>
                       <button className="btn btn-secondary btn-sm" onClick={() => handleEditLead(lead)}>
@@ -245,13 +253,13 @@ export const SujalList: React.FC = () => {
         <div className="add-item-form" style={{ marginBottom: '1.5rem', padding: '1rem 0.5rem' }}>
           <form onSubmit={handleAdd}>
             <div className="form-group row-align" style={{ gap: '1rem', display: 'flex', alignItems: 'center', marginBottom: 0 }}>
-              <input 
-                type="text" 
-                className="form-input" 
+              <input
+                type="text"
+                className="form-input"
                 style={{ flex: 2 }}
-                placeholder="SalesIQ Tag (e.g. #4521) or Phone" 
-                value={newTag} 
-                onChange={e => setNewTag(e.target.value)} 
+                placeholder="SalesIQ Tag (e.g. #4521) or Phone"
+                value={newTag}
+                onChange={e => setNewTag(e.target.value)}
               />
               <select className="form-select" style={{ flex: 1 }} value={newPriority} onChange={e => setNewPriority(e.target.value)}>
                 <option value="High">High Priority</option>
@@ -272,13 +280,14 @@ export const SujalList: React.FC = () => {
                 <th>Identifier (Tag/Phone)</th>
                 <th>Priority</th>
                 <th>Status</th>
+                {isAdmin && <th>Added By</th>}
                 <th>Added On</th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {activeItems.length === 0 && (
-                <tr><td colSpan={5} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>No quick tag calls on the list for today.</td></tr>
+                <tr><td colSpan={isAdmin ? 6 : 5} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>No quick tag calls on the list for today.</td></tr>
               )}
               {activeItems.map(item => (
                 <tr key={item.id}>
@@ -291,6 +300,11 @@ export const SujalList: React.FC = () => {
                   <td>
                     <span className={`badge ${getStatusBadgeClass(item.status)}`}>{item.status}</span>
                   </td>
+                  {isAdmin && (
+                    <td>
+                      <span className="badge badge-gray">{getEmployeeLabel(item.createdBy)}</span>
+                    </td>
+                  )}
                   <td style={{ whiteSpace: 'nowrap' }}>
                     <span style={{ fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
                       {new Date(item.dateAdded).toLocaleDateString()}
@@ -309,9 +323,9 @@ export const SujalList: React.FC = () => {
                         <div style={{ position: 'relative' }} onClick={(e) => e.stopPropagation()}>
                           <select
                             className="form-select btn-sm"
-                            style={{ 
-                              height: '32px', 
-                              padding: '0 0.5rem', 
+                            style={{
+                              height: '32px',
+                              padding: '0 0.5rem',
                               fontSize: '0.875rem',
                               borderRadius: '6px',
                               borderColor: 'var(--border-color)',
@@ -338,8 +352,8 @@ export const SujalList: React.FC = () => {
                           </select>
                         </div>
                       ) : (
-                        <button 
-                          className="btn btn-primary btn-sm" 
+                        <button
+                          className="btn btn-primary btn-sm"
                           onClick={(e) => {
                             e.stopPropagation();
                             setOpenLogCallRowId(prev => prev === item.id ? null : item.id);
@@ -361,13 +375,13 @@ export const SujalList: React.FC = () => {
       </div>
 
       {(isModalOpen || !!bookingLead) && (
-        <AddLeadModal 
-          isOpen={isModalOpen || !!bookingLead} 
+        <AddLeadModal
+          isOpen={isModalOpen || !!bookingLead}
           onClose={() => {
             setIsModalOpen(false);
             setSelectedItemForConversion(null);
             setBookingLead(null);
-          }} 
+          }}
           initialData={
             bookingLead ||
             (selectedItemForConversion ? {

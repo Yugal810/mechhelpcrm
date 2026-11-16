@@ -7,6 +7,7 @@ import { ThemeProvider } from './store/ThemeContext';
 
 import { LoginPage } from './pages/LoginPage';
 import { Dashboard } from './pages/Dashboard';
+import { TodaysLeads } from './pages/TodaysLeads';
 import { DailyQuicks } from './pages/DailyQuicks';
 import { SujalList } from './pages/SujalList';
 import { Kanban } from './pages/Kanban';
@@ -41,6 +42,7 @@ function App() {
                   <Routes>
                     <Route path="/" element={<Layout />}>
                       <Route index element={<Dashboard />} />
+                      <Route path="todays-leads" element={<TodaysLeads />} />
                       <Route path="daily-quicks" element={<DailyQuicks />} />
                       <Route path="kanban" element={<Kanban />} />
                       <Route path="sujal" element={<SujalList />} />

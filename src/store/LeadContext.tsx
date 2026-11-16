@@ -1,19 +1,24 @@
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import type { Lead, SujalCallListItem } from '../types';
-import { LeadService, CallListService, migrateLocalDataToSupabase, SettlementService } from '../utils/dataLayer';
+import { LeadService, CallListService, migrateLocalDataToSupabase, SettlementService, RoundRobinService } from '../utils/dataLayer';
 import { supabase } from '../lib/supabase';
+import { useAuth } from './AuthContext';
 import { playNewLeadSound, playBookingSound } from '../utils/soundService';
 import { ToastNotificationContainer, type ToastData } from '../components/ToastNotification';
 
 interface LeadContextType {
   leads: Lead[];
+  assignedLeads: Lead[];
   sujalList: SujalCallListItem[];
+  assignedSujalList: SujalCallListItem[];
   addLead: (lead: Omit<Lead, 'id' | 'createdDate' | 'bookingHistory' | 'activityHistory'>) => Promise<void>;
   updateLead: (lead: Lead) => Promise<void>;
   deleteLead: (id: string) => Promise<void>;
   addSujalItem: (item: Omit<SujalCallListItem, 'id' | 'dateAdded'>) => Promise<void>;
   updateSujalItem: (item: SujalCallListItem) => Promise<void>;
   deleteSujalItem: (id: string) => Promise<void>;
+  distributeUnassignedLeads: () => Promise<number>;
+  refreshData: () => Promise<void>;
   finalizeBilling: (bookingId: string, lineItems: any[], paidTo: 'garage' | 'mechhelp', garageId?: string, garageName?: string, discount?: number, numberPlate?: string, carBrand?: string, carModel?: string, customerName?: string) => Promise<any>;
   finalizeDirectBilling: (customerName: string, carBrand: string, carModel: string, numberPlate: string, bookingDate: string, garageId: string, garageName: string, lineItems: any[], paidTo: 'garage' | 'mechhelp', discount?: number) => Promise<any>;
   getGarageList: () => Promise<{ id: string; name: string }[]>;
@@ -39,11 +44,19 @@ const LeadContext = createContext<LeadContextType | undefined>(undefined);
 const useSupabase = Boolean(import.meta.env.VITE_SUPABASE_URL && import.meta.env.VITE_SUPABASE_ANON_KEY);
 
 export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { user, isAdmin } = useAuth();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [sujalList, setSujalList] = useState<SujalCallListItem[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isMigrating, setIsMigrating] = useState(false);
   const [isEditingLead, setIsEditingLead] = useState(false);
+
+  const isAdminRef = useRef(isAdmin);
+  const userIdRef = useRef<string | null>(user?.id ?? null);
+  useEffect(() => {
+    isAdminRef.current = isAdmin;
+    userIdRef.current = user?.id ?? null;
+  }, [isAdmin, user?.id]);
 
   const knownLeadIdsRef = useRef<Set<string>>(new Set());
   const notifiedIdsRef = useRef<Set<string>>(new Set());
@@ -156,7 +169,7 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
                   message: `${payload.customerName || payload.name || 'Customer'} • ${payload.garage || 'Partner Garage'} (${payload.bookingType || 'Visit'})`.trim(),
                   duration: 6000,
                 });
-              } else {
+              } else if (isAdminRef.current || (userIdRef.current && payload.assignedTo === userIdRef.current)) {
                 playNewLeadSound();
                 addToast({
                   type: 'success',
@@ -180,7 +193,7 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const { data: latestRows, error } = await supabase
           .from('leads')
-          .select('id, customer_name, car_brand, car_model, lead_type, created_date, last_contacted_date, garage_assigned, booking_type')
+          .select('id, customer_name, car_brand, car_model, lead_type, created_date, last_contacted_date, garage_assigned, booking_type, assigned_to')
           .order('created_date', { ascending: false })
           .limit(5);
 
@@ -218,7 +231,7 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 message: `${row.customer_name || 'Customer'} • ${row.garage_assigned || 'Partner Garage'} (${row.booking_type || 'Visit'})`.trim(),
                 duration: 6000,
               });
-            } else {
+            } else if (isAdminRef.current || (userIdRef.current && row.assigned_to === userIdRef.current)) {
               console.log('🔔 New lead detected from poll:', row);
               playNewLeadSound();
               addToast({
@@ -250,8 +263,12 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addLead = async (leadData: Omit<Lead, 'id' | 'createdDate' | 'bookingHistory' | 'activityHistory'>) => {
     try {
-      const newLead = await LeadService.addLead(leadData);
-      setLeads(prev => [newLead, ...prev]);
+      const payload = {
+        ...leadData,
+        assignedTo: isAdmin ? (leadData.assignedTo ?? null) : (user?.id ?? leadData.assignedTo ?? null),
+      };
+      const newLead = await LeadService.addLead(payload);
+      setLeads(prev => [newLead, ...prev.filter(l => l.id !== newLead.id)]);
     } catch (error) {
       console.error('Error adding lead:', error);
       throw error;
@@ -262,7 +279,7 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // 1. Optimistically update local state immediately so UI updates with 0ms delay
     setLeads(prev => prev.map(l => (l.id === updatedLead.id ? updatedLead : l)));
     try {
-      const savedLead = await LeadService.updateLead(updatedLead);
+      const savedLead = await LeadService.updateLead(updatedLead, { allowAssignedToUpdate: isAdmin });
       setLeads(prev => prev.map(l => (l.id === savedLead.id ? savedLead : l)));
     } catch (error) {
       console.error('Error updating lead:', error);
@@ -284,7 +301,10 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const addSujalItem = async (itemData: Omit<SujalCallListItem, 'id' | 'dateAdded'>) => {
     try {
-      const newItem = await CallListService.addItem(itemData);
+      const newItem = await CallListService.addItem({
+        ...itemData,
+        createdBy: itemData.createdBy ?? user?.id ?? null,
+      });
       setSujalList(prev => [newItem, ...prev]);
     } catch (error) {
       console.error('Error adding call list item:', error);
@@ -377,8 +397,30 @@ export const LeadProvider: React.FC<{ children: React.ReactNode }> = ({ children
     await fetchAllData();
   };
 
+  const assignedLeads = useMemo(() => {
+    if (isAdmin) return leads;
+    if (!user?.id) return [];
+    return leads.filter(l => l.assignedTo === user.id);
+  }, [leads, isAdmin, user?.id]);
+
+  const assignedSujalList = useMemo(() => {
+    if (isAdmin) return sujalList;
+    if (!user?.id) return [];
+    return sujalList.filter(item => item.createdBy === user.id);
+  }, [sujalList, isAdmin, user?.id]);
+
+  const distributeUnassignedLeads = useCallback(async () => {
+    const count = await RoundRobinService.distributeUnassignedOpenLeads();
+    await fetchAllData(true);
+    return count;
+  }, [fetchAllData]);
+
+  const refreshData = useCallback(async () => {
+    await fetchAllData(true);
+  }, [fetchAllData]);
+
   return (
-    <LeadContext.Provider value={{ leads, sujalList, addLead, updateLead, deleteLead, addSujalItem, updateSujalItem, deleteSujalItem, finalizeBilling, finalizeDirectBilling, getGarageList, addGarage, removeGarage, recordPayment, getGaragesWithBalances, getGarageSettlements, getAllSettlements, getHistorySettlements, markFinalSettlement, deleteSettlement, updateSettlementBilling, settleGarage, isLoading, isMigrating, isEditingLead, setIsEditingLead }}>
+    <LeadContext.Provider value={{ leads, assignedLeads, sujalList, assignedSujalList, addLead, updateLead, deleteLead, addSujalItem, updateSujalItem, deleteSujalItem, distributeUnassignedLeads, refreshData, finalizeBilling, finalizeDirectBilling, getGarageList, addGarage, removeGarage, recordPayment, getGaragesWithBalances, getGarageSettlements, getAllSettlements, getHistorySettlements, markFinalSettlement, deleteSettlement, updateSettlementBilling, settleGarage, isLoading, isMigrating, isEditingLead, setIsEditingLead }}>
       {children}
       <ToastNotificationContainer toasts={toasts} onDismiss={dismissToast} />
     </LeadContext.Provider>

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { v4 as uuidv4 } from 'uuid';
-import type { Lead, LeadSource, Salesperson, LeadType, BookingType, Priority, CarBrandModel, ServiceType } from '../types';
+import type { Lead, LeadSource, LeadType, BookingType, Priority, CarBrandModel, ServiceType } from '../types';
 import { CAR_BRANDS, PREMIUM_MODELS } from '../data/seed';
 import { useLeadContext } from '../store/LeadContext';
-import { LeadService } from '../utils/dataLayer';
+import { useAuth } from '../store/AuthContext';
+import { LeadService, toBoardDateYmd } from '../utils/dataLayer';
 import './AddLeadModal.css';
 
 interface AddLeadModalProps {
@@ -15,6 +16,7 @@ interface AddLeadModalProps {
 
 export const AddLeadModal: React.FC<AddLeadModalProps> = ({ isOpen, onClose, initialData }) => {
   const { addLead, updateLead, getGarageList } = useLeadContext();
+  const { user, isAdmin, salesEmployees, getEmployeeLabel } = useAuth();
   const isEditing = !!initialData?.id;
 
   const [createdDate, setCreatedDate] = useState<string>(
@@ -24,7 +26,9 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({ isOpen, onClose, ini
   );
   const [serviceType, setServiceType] = useState<ServiceType[]>(initialData?.serviceType || []);
   const [leadSource, setLeadSource] = useState<LeadSource>(initialData?.leadSource || 'SalesIQ');
-  const [salesperson, setSalesperson] = useState<Salesperson>(initialData?.salesperson || 'Choice');
+  const [assignedTo, setAssignedTo] = useState<string>(
+    initialData?.assignedTo || (!isEditing && !isAdmin ? (user?.id || '') : '')
+  );
   const [identifier, setIdentifier] = useState(initialData?.identifier || '');
   const [customerName, setCustomerName] = useState(initialData?.customerName || '');
   const [carBrand, setCarBrand] = useState(initialData?.carBrand || '');
@@ -36,7 +40,7 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({ isOpen, onClose, ini
   
   const [bookingType, setBookingType] = useState<BookingType | undefined>(initialData?.bookingType);
   const [garageAssigned, setGarageAssigned] = useState(initialData?.garageAssigned || '');
-  const [bookingDateTime, setBookingDateTime] = useState(initialData?.bookingDateTime ? initialData.bookingDateTime.split('T')[0] : '');
+  const [bookingDateTime, setBookingDateTime] = useState(toBoardDateYmd(initialData?.bookingDateTime));
 
   const [garageList, setGarageList] = useState<{ id: string; name: string }[]>([]);
 
@@ -89,7 +93,7 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({ isOpen, onClose, ini
         setCreatedDate(new Date().toISOString().split('T')[0]);
         setServiceType([]);
         setLeadSource('SalesIQ');
-        setSalesperson('Choice');
+        setAssignedTo(isAdmin ? '' : (user?.id || ''));
         setIdentifier('');
         setCustomerName('');
         setCarBrand('');
@@ -117,7 +121,7 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({ isOpen, onClose, ini
         );
         setServiceType(initialData.serviceType || []);
         setLeadSource(initialData.leadSource || 'SalesIQ');
-        setSalesperson(initialData.salesperson || 'Choice');
+        setAssignedTo(initialData.assignedTo || '');
         setIdentifier(initialData.identifier || '');
         setCustomerName(initialData.customerName || '');
         setCarBrand(initialData.carBrand || '');
@@ -128,7 +132,7 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({ isOpen, onClose, ini
         setRetargetTimeSlot(initialData.retargetTimeSlot || null);
         setBookingType(initialData.bookingType);
         setGarageAssigned(initialData.garageAssigned || '');
-        setBookingDateTime(initialData.bookingDateTime ? initialData.bookingDateTime.split('T')[0] : '');
+        setBookingDateTime(toBoardDateYmd(initialData.bookingDateTime));
         setNextFollowUpDate(initialData.nextFollowUpDate || new Date().toISOString().split('T')[0]);
         setNotes(initialData.notes || '');
         setIsVip(initialData.isVip || false);
@@ -261,7 +265,10 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({ isOpen, onClose, ini
       id: isEditing ? initialData!.id! : uuidv4(),
       customerName,
       leadSource,
-      salesperson,
+      salesperson: initialData?.salesperson || 'Choice',
+      assignedTo: isAdmin
+        ? (assignedTo || null)
+        : (isEditing ? (initialData?.assignedTo ?? null) : (user?.id || null)),
       identifier,
       carBrand: finalCarBrand,
       carModel: finalCarModel,
@@ -269,7 +276,11 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({ isOpen, onClose, ini
       leadType,
       bookingType: leadType === 'Booked' ? bookingType : undefined,
       garageAssigned: leadType === 'Booked' ? garageAssigned : undefined,
-      bookingDateTime: leadType === 'Booked' ? bookingDateTime : undefined,
+      bookingDateTime: leadType === 'Booked'
+        ? (isEditing && initialData?.bookingDateTime && bookingDateTime === toBoardDateYmd(initialData.bookingDateTime)
+            ? initialData.bookingDateTime
+            : bookingDateTime)
+        : undefined,
       garageNotified: isEditing ? !!initialData?.garageNotified : false,
       nextFollowUpDate,
       lastContactedDate: isEditing ? initialData!.lastContactedDate! : new Date().toISOString(),
@@ -384,18 +395,35 @@ export const AddLeadModal: React.FC<AddLeadModalProps> = ({ isOpen, onClose, ini
               </div>
 
               <div className="form-group">
-                <label className="form-label">Salesperson</label>
-                <select 
-                  id="field-salesperson"
-                  className="form-select" 
-                  value={salesperson} 
-                  onChange={e => setSalesperson(e.target.value as Salesperson)}
-                >
-                  <option value="Choice">Choice</option>
-                  <option value="Nothing">Nothing</option>
-                  <option value="Tecno">Tecno</option>
-                  <option value="Realme">Realme</option>
-                </select>
+                <label className="form-label">Assigned To</label>
+                {isAdmin ? (
+                  <select
+                    id="field-assignedTo"
+                    className="form-select"
+                    value={assignedTo}
+                    onChange={e => setAssignedTo(e.target.value)}
+                  >
+                    <option value="">{isEditing ? 'Unassigned' : 'Auto (Round-Robin)'}</option>
+                    {salesEmployees.map(emp => (
+                      <option key={emp.id} value={emp.id}>
+                        {emp.displayName}
+                      </option>
+                    ))}
+                    {assignedTo && !salesEmployees.some(emp => emp.id === assignedTo) && (
+                      <option value={assignedTo}>{getEmployeeLabel(assignedTo)}</option>
+                    )}
+                  </select>
+                ) : (
+                  <input
+                    id="field-assignedTo"
+                    type="text"
+                    className="form-input"
+                    value={isEditing ? getEmployeeLabel(assignedTo) : getEmployeeLabel(user?.id)}
+                    readOnly
+                    disabled
+                    title="Only an admin can reassign leads"
+                  />
+                )}
               </div>
             </div>
 

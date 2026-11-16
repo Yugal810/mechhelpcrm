@@ -1,5 +1,17 @@
 export type LeadSource = 'SalesIQ' | 'Direct Call' | 'Referral';
-export type Salesperson = 'Choice' | 'Nothing' | 'Tecno' | 'Realme';
+export type Salesperson = string;
+export type UserRole = 'admin' | 'sales';
+
+export interface UserProfile {
+  id: string;
+  email: string;
+  firstName?: string | null;
+  lastName?: string | null;
+  displayName: string;
+  role: UserRole;
+  createdAt?: string;
+}
+
 export type LeadType = 'Fresh Lead' | 'Call Not Received' | 'Details Shared' | 'Shared Quotation' | 'Retarget' | 'Booked' | 'Completed' | 'Lost' | 'Redirected' | 'Rescheduled';
 export type BookingType = 'Pickup' | 'Garage Visit';
 export type Priority = 'High' | 'Medium' | 'Low';
@@ -30,6 +42,7 @@ export interface Lead {
   customerName: string;
   leadSource: LeadSource;
   salesperson?: Salesperson;
+  assignedTo?: string | null;
   identifier: string; // SalesIQ Tag OR Last 4 Digits
   carBrand: string;
   carModel: string;
@@ -66,6 +79,7 @@ export interface SujalCallListItem {
   priority: string;
   status: SujalStatus;
   linkedLeadId?: string;
+  createdBy?: string | null;
   dateAdded: string;
 }
 

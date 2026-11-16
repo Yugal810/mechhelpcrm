@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { Lead, RescheduleHistoryEntry } from '../types';
 import { X, Calendar, Clock, MapPin, Car, User, Phone, CalendarClock, AlertCircle } from 'lucide-react';
 import { useLeadContext } from '../store/LeadContext';
+import { toBoardDateYmd } from '../utils/dataLayer';
 import './RescheduleModal.css';
 
 interface RescheduleModalProps {
@@ -25,7 +26,7 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({ isOpen, onClos
 
   // Parse current booking date and time
   const currentDateTime = lead?.bookingDateTime ? new Date(lead.bookingDateTime.includes('T') ? lead.bookingDateTime : `${lead.bookingDateTime}T00:00:00`) : null;
-  const currentDate = currentDateTime && !isNaN(currentDateTime.getTime()) ? currentDateTime.toISOString().split('T')[0] : '';
+  const currentDate = toBoardDateYmd(lead?.bookingDateTime || lead?.nextFollowUpDate);
   const hasSpecificTime = lead?.bookingDateTime?.includes('T') && lead.bookingDateTime.split('T')[1]?.length >= 4;
   const currentTime = currentDateTime && !isNaN(currentDateTime.getTime()) && hasSpecificTime ? currentDateTime.toTimeString().slice(0, 5) : '';
 
@@ -102,10 +103,13 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({ isOpen, onClos
         rescheduledOn: new Date().toISOString()
       };
 
+      const nextGarageAssigned = newGarage || lead.garageAssigned;
       const updatedLead: Lead = {
         ...lead,
         bookingDateTime: selectedDate.toISOString(),
-        garageAssigned: newGarage || lead.garageAssigned,
+        nextFollowUpDate: newDate,
+        garageAssigned: nextGarageAssigned,
+        garageId: nextGarageAssigned !== lead.garageAssigned ? undefined : lead.garageId,
         bookingHistory: [...(lead.bookingHistory || []), historyEntry]
       };
 
@@ -119,7 +123,8 @@ export const RescheduleModal: React.FC<RescheduleModalProps> = ({ isOpen, onClos
     }
   };
 
-  const todayStr = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const todayStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   return createPortal(
     <div 

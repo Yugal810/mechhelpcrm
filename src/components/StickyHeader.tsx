@@ -11,16 +11,16 @@ import { isToday, isTomorrow, isBefore, startOfToday } from 'date-fns';
 
 export const StickyHeader: React.FC = () => {
   const location = useLocation();
-  const { leads, isLoading, isEditingLead } = useLeadContext();
-
-  if (isEditingLead || location.pathname === '/vehicle-specs') {
-    return null;
-  }
+  const { leads, assignedLeads, isLoading, isEditingLead } = useLeadContext();
   const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   const [selectedCallLead, setSelectedCallLead] = React.useState<Lead | null>(null);
   const [bookingLead, setBookingLead] = React.useState<Lead | null>(null);
+
+  if (isEditingLead || location.pathname === '/vehicle-specs') {
+    return null;
+  }
 
   const parseBookingDate = (dStr?: string): Date => {
     if (!dStr) return new Date(NaN);
@@ -35,7 +35,7 @@ export const StickyHeader: React.FC = () => {
   const totalBookings = bookedLeads.length;
 
   // Reminders logic matching ReminderPage (Retarget leads due today or rolled over from past)
-  const todayReminders = leads.filter(l => {
+  const todayReminders = assignedLeads.filter(l => {
     if (l.leadType !== 'Retarget') return false;
     const fDate = parseBookingDate(l.nextFollowUpDate);
     return isToday(fDate) || isBefore(fDate, today);

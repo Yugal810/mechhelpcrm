@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useLeadContext } from '../store/LeadContext';
+import { useAuth } from '../store/AuthContext';
 import { isToday, isBefore, startOfToday, differenceInDays } from 'date-fns';
 import { CallOutcomeModal } from '../components/CallOutcomeModal';
 import { FullPageLeadEdit } from '../components/FullPageLeadEdit';
@@ -10,7 +11,8 @@ import type { Lead } from '../types';
 import './Dashboard.css';
 
 export const Dashboard: React.FC = () => {
-  const { leads, deleteLead } = useLeadContext();
+  const { assignedLeads, deleteLead } = useLeadContext();
+  const { isAdmin, getEmployeeLabel } = useAuth();
   const [isAddingNewLead, setIsAddingNewLead] = useState(false);
   const [deleteErrorId, setDeleteErrorId] = useState<string | null>(null);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
@@ -18,7 +20,7 @@ export const Dashboard: React.FC = () => {
   const today = startOfToday();
 
   // Active leads (not booked/completed/lost)
-  const activeLeads = leads.filter(l => !['Booked', 'Completed', 'Lost'].includes(l.leadType));
+  const activeLeads = assignedLeads.filter(l => !['Booked', 'Completed', 'Lost'].includes(l.leadType));
 
   const overdue = activeLeads.filter(l => isBefore(new Date(l.nextFollowUpDate), today))
     .sort((a, b) => new Date(a.nextFollowUpDate).getTime() - new Date(a.nextFollowUpDate).getTime());
@@ -107,6 +109,11 @@ export const Dashboard: React.FC = () => {
                         {lead.isVip ? 'VIP' : lead.leadSource}
                       </span>
                       <ServiceTypeBadge serviceType={lead.serviceType} />
+                      {isAdmin && (
+                        <span className="badge badge-gray" title="Assigned Employee">
+                          {getEmployeeLabel(lead.assignedTo)}
+                        </span>
+                      )}
                       {isOverdue && <span className="badge badge-red">Overdue</span>}
                       {isVipTouch && lead.isVip && <span className="badge badge-vip">30d Touchbase</span>}
                     </div>

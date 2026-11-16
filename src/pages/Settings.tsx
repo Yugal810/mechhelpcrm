@@ -1,5 +1,7 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useAuth } from '../store/AuthContext';
+import { useLeadContext } from '../store/LeadContext';
+import type { UserRole } from '../types';
 import {
   Eye,
   EyeOff,
@@ -9,6 +11,8 @@ import {
   Download,
   Upload,
   Database,
+  Users,
+  Shuffle,
 } from 'lucide-react';
 import {
   downloadDatabaseBackup,
@@ -17,7 +21,8 @@ import {
 import './Settings.css';
 
 export const Settings: React.FC = () => {
-  const { user, updatePassword } = useAuth();
+  const { user, isAdmin, allProfiles, salesEmployees, updateProfileRole, refreshProfiles, updatePassword } = useAuth();
+  const { leads, distributeUnassignedLeads } = useLeadContext();
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -35,8 +40,57 @@ export const Settings: React.FC = () => {
   const [restoreProgress, setRestoreProgress] = useState<string | null>(null);
   const [backupSuccessMsg, setBackupSuccessMsg] = useState<string | null>(null);
   const [backupErrorMsg, setBackupErrorMsg] = useState<string | null>(null);
+  const [isDistributing, setIsDistributing] = useState(false);
+  const [updatingRoleId, setUpdatingRoleId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const openLeadCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    let unassignedOpen = 0;
+    leads.forEach((l) => {
+      if (['Booked', 'Completed', 'Lost'].includes(l.leadType)) return;
+      if (l.assignedTo) {
+        counts[l.assignedTo] = (counts[l.assignedTo] || 0) + 1;
+      } else {
+        unassignedOpen++;
+      }
+    });
+    return { counts, unassignedOpen };
+  }, [leads]);
+
+  const handleRoleChange = async (profileId: string, newRole: UserRole) => {
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    try {
+      setUpdatingRoleId(profileId);
+      await updateProfileRole(profileId, newRole);
+      setSuccessMsg('Team member role updated.');
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to update role.');
+    } finally {
+      setUpdatingRoleId(null);
+    }
+  };
+
+  const handleDistributeLeads = async () => {
+    setErrorMsg(null);
+    setSuccessMsg(null);
+    try {
+      setIsDistributing(true);
+      const count = await distributeUnassignedLeads();
+      await refreshProfiles();
+      setSuccessMsg(
+        count > 0
+          ? `Distributed ${count} unassigned open lead${count === 1 ? '' : 's'} via round-robin.`
+          : 'No unassigned open leads needed distribution.'
+      );
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Failed to distribute leads.');
+    } finally {
+      setIsDistributing(false);
+    }
+  };
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -178,7 +232,7 @@ export const Settings: React.FC = () => {
               id="settings-email"
               type="email"
               className="settings-input settings-input-readonly"
-              value={user?.email || 'sonparatev@gmail.com'}
+              value={user?.email || ''}
               readOnly
               disabled
             />
@@ -266,6 +320,83 @@ export const Settings: React.FC = () => {
             </button>
           </div>
         </form>
+
+        {isAdmin && (
+          <>
+            <hr className="settings-divider" />
+
+            <div className="settings-team-section">
+              <div className="settings-backup-section" style={{ marginBottom: '0.85rem' }}>
+                <div className="settings-backup-left">
+                  <div className="settings-backup-icon-wrapper">
+                    <Users size={18} className="settings-backup-icon" />
+                  </div>
+                  <div>
+                    <h2 className="settings-section-title">
+                      Sales Team & Round-Robin ({salesEmployees.length} active)
+                    </h2>
+                    <p className="settings-section-desc">
+                      Synced automatically from Supabase Authentication. Unassigned open leads: {openLeadCounts.unassignedOpen}.
+                    </p>
+                  </div>
+                </div>
+                <div className="settings-backup-actions">
+                  <button
+                    type="button"
+                    className="settings-backup-btn"
+                    onClick={handleDistributeLeads}
+                    disabled={isDistributing || salesEmployees.length === 0}
+                    title="Distribute unassigned open leads evenly across sales employees"
+                  >
+                    {isDistributing ? (
+                      <>
+                        <RefreshCw size={14} className="spin" />
+                        <span>Distributing...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Shuffle size={14} />
+                        <span>Distribute Open Leads</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="settings-team-list">
+                {allProfiles.map((member) => {
+                  const isSelf = member.id === user?.id;
+                  const openCount = openLeadCounts.counts[member.id] || 0;
+                  return (
+                    <div key={member.id} className="settings-team-row">
+                      <div className="settings-team-info">
+                        <span className="settings-team-name">{member.displayName}</span>
+                        <span className="settings-team-meta">
+                          {member.email} · {openCount} open {openCount === 1 ? 'lead' : 'leads'}
+                        </span>
+                      </div>
+                      <select
+                        className="settings-role-select"
+                        value={member.role}
+                        disabled={isSelf || updatingRoleId === member.id}
+                        title={isSelf ? 'You cannot demote your own active admin account' : 'Change role'}
+                        onChange={(e) => handleRoleChange(member.id, e.target.value as UserRole)}
+                      >
+                        <option value="sales">Sales</option>
+                        <option value="admin">Admin</option>
+                      </select>
+                    </div>
+                  );
+                })}
+                {allProfiles.length === 0 && (
+                  <p className="settings-section-desc">
+                    No profiles loaded yet. Run supabase/round_robin_assignment.sql in Supabase SQL Editor.
+                  </p>
+                )}
+              </div>
+            </div>
+          </>
+        )}
 
         <hr className="settings-divider" />
 

@@ -92,7 +92,7 @@ const EntryTable: React.FC<{ entries: DailyQuicksEntry[] }> = ({ entries }) => {
 };
 
 export const DailyQuicks: React.FC = () => {
-  const { leads, isLoading: leadsLoading } = useLeadContext();
+  const { assignedLeads, isLoading: leadsLoading } = useLeadContext();
   const today = toISTDateString();
 
   const selectedDate = today;
@@ -104,7 +104,7 @@ export const DailyQuicks: React.FC = () => {
     setIsLoading(true);
     setError(null);
     try {
-      const summary = await DailyQuicksService.getSummaryForDate(date, leads);
+      const summary = await DailyQuicksService.getSummaryForDate(date, assignedLeads);
       setStoredSummary(summary);
     } catch (err) {
       console.error('Failed to load Daily Quicks', err);
@@ -112,7 +112,7 @@ export const DailyQuicks: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [leads]);
+  }, [assignedLeads]);
 
   useEffect(() => {
     if (leadsLoading) return;

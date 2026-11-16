@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { useLeadContext } from '../store/LeadContext';
+import { useAuth } from '../store/AuthContext';
 import { AddLeadModal } from '../components/AddLeadModal';
 import { FullPageLeadEdit } from '../components/FullPageLeadEdit';
 import { ServiceTypeBadge } from '../components/ServiceTypeBadge';
@@ -19,7 +20,8 @@ interface Props {
 }
 
 export const ReminderPage: React.FC<Props> = ({ slot }) => {
-  const { leads, deleteLead } = useLeadContext();
+  const { assignedLeads, deleteLead } = useLeadContext();
+  const { isAdmin, getEmployeeLabel } = useAuth();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
@@ -34,7 +36,7 @@ export const ReminderPage: React.FC<Props> = ({ slot }) => {
   // Calculate total counts for each staleness bucket for the current slot
   const allSlotLeads = useMemo(() => {
     if (slot !== 'morning' && slot !== 'evening') return [];
-    return leads.filter(l => {
+    return assignedLeads.filter(l => {
       if (l.leadType !== 'Retarget') return false;
       const followUpDate = parseDate(l.nextFollowUpDate);
       if (!isToday(followUpDate) && !isBefore(followUpDate, today)) return false;
@@ -42,7 +44,7 @@ export const ReminderPage: React.FC<Props> = ({ slot }) => {
       if (slot === 'evening') return l.retargetTimeSlot === 'evening' || !l.retargetTimeSlot;
       return false;
     });
-  }, [leads, slot, today]);
+  }, [assignedLeads, slot, today]);
 
   const stalenessCounts = useMemo(() => {
     let fresh = 0;
@@ -63,7 +65,7 @@ export const ReminderPage: React.FC<Props> = ({ slot }) => {
   }, [allSlotLeads, today]);
 
   const sectionLeads = useMemo(() => {
-    let data = leads.filter(l => {
+    let data = assignedLeads.filter(l => {
       if (slot === 'shared-quotation') {
         return l.leadType === 'Shared Quotation';
       }
@@ -110,7 +112,7 @@ export const ReminderPage: React.FC<Props> = ({ slot }) => {
     }
 
     return data.sort((a, b) => new Date(b.createdDate || 0).getTime() - new Date(a.createdDate || 0).getTime());
-  }, [leads, filterPriority, filterStaleness, searchTerm, slot, today]);
+  }, [assignedLeads, filterPriority, filterStaleness, searchTerm, slot, today]);
 
   const handleEdit = (lead: Lead) => {
     setEditingLead(lead);
@@ -210,6 +212,7 @@ export const ReminderPage: React.FC<Props> = ({ slot }) => {
               <th>Identifier (Source)</th>
               <th>Car</th>
               <th>Stage / Slot</th>
+              {isAdmin && <th>Assigned To</th>}
               <th>Note</th>
               <th>Next Follow-Up</th>
               <th>Actions</th>
@@ -253,6 +256,11 @@ export const ReminderPage: React.FC<Props> = ({ slot }) => {
                               : lead.leadType}
                     </span>
                   </td>
+                  {isAdmin && (
+                    <td>
+                      <span className="badge badge-gray">{getEmployeeLabel(lead.assignedTo)}</span>
+                    </td>
+                  )}
                   <td><LeadNoteButton lead={lead} /></td>
                   <td>
                     <div>
@@ -282,7 +290,7 @@ export const ReminderPage: React.FC<Props> = ({ slot }) => {
             })}
             {sectionLeads.length === 0 && (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '3rem' }}>
+                <td colSpan={isAdmin ? 8 : 7} style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '3rem' }}>
                   {slot === 'details-shared'
                     ? 'No leads in Details Shared stage for 3+ days.'
                     : slot === 'shared-quotation'

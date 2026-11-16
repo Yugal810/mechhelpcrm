@@ -87,7 +87,10 @@ export const LeadNoteButton: React.FC<LeadNoteButtonProps> = ({ lead }) => {
             >
               <div className="modal-header">
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <FileText size={18} className={hasNote ? 'text-success' : 'text-danger'} />
+                  <FileText
+                    size={18}
+                    style={{ color: hasNote ? 'var(--success)' : 'var(--text-muted)' }}
+                  />
                   <h2 style={{ fontSize: '1.1rem', margin: 0 }}>
                     Note for {lead.customerName || 'Lead'}
                   </h2>
